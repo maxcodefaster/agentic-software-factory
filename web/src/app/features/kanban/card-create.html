@@ -1,0 +1,33 @@
+<!--
+Unless explicitly acquired and licensed from Licensor under another license, the contents of this file are subject to the Reciprocal Public License ("RPL") Version 1.5, or subsequent versions as allowed by the RPL, and You may not copy or use this file in either source code or executable form, except in compliance with the terms and conditions of the RPL.
+
+All software distributed under the RPL is provided strictly on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED, AND LICENSOR HEREBY DISCLAIMS ALL SUCH WARRANTIES, INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT, OR NON-INFRINGEMENT. See the RPL for specific language governing rights and limitations under the RPL.
+-->
+
+<factory-overlay variant="center" [ariaLabel]="'factory.newRequirement' | transloco" panelClass="flex max-h-[85dvh] w-full max-w-xl flex-col overflow-hidden rounded-brand-2xl p-0 shadow-brand-lift" (dismiss)="dismiss.emit()">
+  <header class="flex shrink-0 flex-col gap-(--spacing-brand-m) border-b border-brand-gray-100 px-(--spacing-brand-l) pt-(--spacing-brand-l) pb-(--spacing-brand-m)">
+    <div class="flex items-start justify-between gap-(--spacing-brand-s)">
+      <div><span class="factory-section-label">{{ 'factory.newRequirement' | transloco }}</span><h2 class="text-display font-semibold tracking-[-.025em] text-brand-gray-900">{{ title().trim() || ('factory.ideaQuestion' | transloco) }}</h2></div>
+      <button hlmBtn variant="ghost" size="icon" [attr.aria-label]="'common.close' | transloco" (click)="dismiss.emit()"><factory-icon name="x" size="lg" /></button>
+    </div>
+  </header>
+  <div class="flex min-h-0 flex-1 flex-col gap-(--spacing-brand-l) overflow-y-auto px-(--spacing-brand-l) py-(--spacing-brand-l)">
+    <label class="flex flex-col gap-(--spacing-brand-xxs)"><span class="factory-section-label">{{ 'factory.title' | transloco }}</span><input hlmInput id="new-requirement-title" name="title" autocomplete="off" [value]="title()" (input)="title.set($any($event.target).value)" (keydown.enter)="submit()" /></label>
+    <label class="flex flex-col gap-(--spacing-brand-xxs)"><span class="factory-section-label">{{ 'factory.context' | transloco }}</span><textarea id="new-requirement-context" name="context" autocomplete="off" rows="6" class="factory-input min-h-32 w-full resize-y" [placeholder]="'factory.contextPlaceholder' | transloco" [value]="description()" (input)="description.set($any($event.target).value)"></textarea></label>
+    <div class="flex flex-col gap-(--spacing-brand-xxs)"><span class="factory-section-label">{{ 'factory.responsibleOptional' | transloco }}</span><factory-assignee-picker [context]="context()" inputId="new-requirement-assignee" [value]="assignee()" (selected)="assignee.set($event)" /></div>
+    @if (applications().length > 1) {
+      <fieldset class="flex flex-col gap-(--spacing-brand-xs)"><legend class="factory-section-label">{{ 'factory.application' | transloco }}</legend>
+        @for (application of applications(); track application.id) {
+          <button type="button" class="factory-selectable flex items-center gap-(--spacing-brand-xs) px-(--spacing-brand-s) py-(--spacing-brand-xs) text-left" [class.is-selected]="isSelected(application.id)" (click)="toggle(application.id)">
+            <span class="grid size-5 place-items-center border border-brand-gray-300" [class.bg-brand-mint-500]="isSelected(application.id)">@if (isSelected(application.id)) {<factory-icon name="check" size="xs" />}</span>
+            <span class="min-w-0 flex-1"><strong class="block text-sm">{{ application.name }}</strong><span class="text-meta text-brand-gray-600">{{ application.description || application.status }}</span></span>
+          </button>
+        }
+      </fieldset>
+    }
+    @if (localError() ?? error(); as err) {<p role="alert" class="text-sm text-brand-danger">{{ err }}</p>}
+  </div>
+  <footer class="flex justify-end gap-(--spacing-brand-xs) border-t border-brand-gray-100 px-(--spacing-brand-l) py-(--spacing-brand-s)">
+    <button hlmBtn variant="ghost" (click)="dismiss.emit()">{{ 'common.cancel' | transloco }}</button><button hlmBtn [disabled]="busy()" (click)="submit()">{{ 'factory.addBacklog' | transloco }} <factory-icon name="arrow-right" size="sm" /></button>
+  </footer>
+</factory-overlay>

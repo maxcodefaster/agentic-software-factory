@@ -1,0 +1,1 @@
+{"name":"Batch worker","build":{"dockerfile":"Dockerfile","target":"developer"},"postStartCommand":"./workerctl start"}

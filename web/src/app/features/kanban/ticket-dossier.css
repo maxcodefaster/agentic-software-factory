@@ -1,0 +1,27 @@
+/*
+ * Unless explicitly acquired and licensed from Licensor under another license, the contents of this file are subject to the Reciprocal Public License ("RPL") Version 1.5, or subsequent versions as allowed by the RPL, and You may not copy or use this file in either source code or executable form, except in compliance with the terms and conditions of the RPL.
+ *
+ * All software distributed under the RPL is provided strictly on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED, AND LICENSOR HEREBY DISCLAIMS ALL SUCH WARRANTIES, INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT, OR NON-INFRINGEMENT. See the RPL for specific language governing rights and limitations under the RPL.
+ */
+
+.ticket-dossier {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--spacing-brand-xs);
+  border-top: 1px solid var(--color-brand-gray-100);
+  background: var(--color-brand-surface-muted);
+  padding: var(--spacing-brand-s);
+}
+
+.ticket-dossier-section {
+  padding-top: var(--spacing-brand-xs);
+}
+
+@media (min-width: 1024px) {
+  .ticket-dossier {
+    overflow-y: auto;
+    border-top: 0;
+    border-left: 1px solid var(--color-brand-gray-100);
+  }
+}

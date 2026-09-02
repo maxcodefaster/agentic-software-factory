@@ -1,0 +1,1 @@
+{"name":"Inventory API verification","image":"oven/bun:1.3.14-alpine","workspaceMount":"source=${localWorkspaceFolder},target=/workspaces/project,type=bind,readonly","workspaceFolder":"/workspaces/project","postStartCommand":"./servicectl start"}

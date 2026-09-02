@@ -1,0 +1,54 @@
+{
+  "name": "Agentic Software Factory Example",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": "..",
+    "target": "developer",
+    "args": { "DEVCONTAINER_STAGE": "developer" }
+  },
+  "remoteUser": "vscode",
+  "containerEnv": {
+    "PGDATA": "${localEnv:FACTORY_STATE_DIR:/home/vscode/.local/share/devcontainer}/postgres",
+    "PROCESS_COMPOSE_LOG_DIRECTORY": "${localEnv:FACTORY_STATE_DIR:/home/vscode/.local/state/devcontainer}/process-compose",
+    "DATABASE_URL": "postgres://factory_app:factory_app@127.0.0.1:5432/factory_app",
+    "BETTER_AUTH_URL": "http://127.0.0.1:4173",
+    "BETTER_AUTH_ENABLE_SIGN_UP": "true",
+    "HOST": "0.0.0.0",
+    "PORT": "4173"
+  },
+  "postCreateCommand": ["bun", "run", "setup"],
+  "postStartCommand": ["sh", ".devcontainer/start.sh"],
+  "customizations": {
+    "coder": {
+      "autoStart": true,
+      "name": "agentic-software-factory-example",
+      "apps": [
+        {
+          "slug": "application",
+          "displayName": "Agentic Software Factory Example",
+          "url": "http://127.0.0.1:4173",
+          "openIn": "tab",
+          "share": "owner",
+          "healthCheck": {
+            "url": "http://127.0.0.1:4173/api/health/ready",
+            "interval": 5,
+            "threshold": 12
+          }
+        }
+      ]
+    },
+    "vscode": {
+      "settings": {
+        "typescript.tsdk": "node_modules/typescript/lib",
+        "task.allowAutomaticTasks": "on",
+        "terminal.integrated.cwd": "${containerWorkspaceFolder}",
+        "telemetry.telemetryLevel": "off"
+      },
+      "extensions": [
+        "biomejs.biome@3.7.1",
+        "bradlc.vscode-tailwindcss@0.16.0",
+        "redhat.vscode-yaml@1.24.0"
+      ]
+    }
+  }
+}

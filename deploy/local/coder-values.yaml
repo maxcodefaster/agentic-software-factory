@@ -1,0 +1,114 @@
+# Unless explicitly acquired and licensed from Licensor under another license, the contents of this file are subject to the Reciprocal Public License ("RPL") Version 1.5, or subsequent versions as allowed by the RPL, and You may not copy or use this file in either source code or executable form, except in compliance with the terms and conditions of the RPL.
+#
+# All software distributed under the RPL is provided strictly on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED, AND LICENSOR HEREBY DISCLAIMS ALL SUCH WARRANTIES, INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT, OR NON-INFRINGEMENT. See the RPL for specific language governing rights and limitations under the RPL.
+
+coder:
+  image:
+    repo: ghcr.io/coder/coder
+    tag: v2.37.0
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+  serviceAccount:
+    workspacePerms: false
+    enableDeployments: false
+    workspaceNamespaces:
+      - name: factory-workspaces
+        workspacePerms: true
+        enableDeployments: true
+  ingress:
+    enable: true
+    className: nginx
+    host: coder.localhost
+    wildcardHost: "*.apps.coder.localhost"
+  env:
+    - name: CODER_PG_CONNECTION_URL
+      valueFrom:
+        secretKeyRef:
+          name: coder-db-url
+          key: url
+    - name: CODER_ACCESS_URL
+      value: http://coder.localhost
+    - name: CODER_WILDCARD_ACCESS_URL
+      value: "*.apps.coder.localhost"
+    - name: CODER_OIDC_ISSUER_URL
+      value: http://factory.localhost
+    - name: CODER_OIDC_CLIENT_ID
+      valueFrom:
+        secretKeyRef:
+          name: coder-oidc
+          key: client-id
+    - name: CODER_OIDC_CLIENT_SECRET
+      valueFrom:
+        secretKeyRef:
+          name: coder-oidc
+          key: client-secret
+    - name: CODER_OIDC_SCOPES
+      value: openid,profile,email,groups,offline_access,mcp:call
+    - name: CODER_OIDC_EMAIL_FIELD
+      value: email
+    - name: CODER_OIDC_USERNAME_FIELD
+      value: preferred_username
+    - name: CODER_OIDC_ALLOW_SIGNUPS
+      value: "true"
+    - name: CODER_OIDC_ALLOWED_GROUPS
+      value: tenant-factory
+    - name: CODER_OIDC_SIGN_IN_TEXT
+      value: Mit Agentic Software Factory anmelden
+    - name: CODER_EXTERNAL_AUTH_0_ID
+      value: forgejo
+    - name: CODER_EXTERNAL_AUTH_0_TYPE
+      value: gitea
+    - name: CODER_EXTERNAL_AUTH_0_CLIENT_ID
+      valueFrom:
+        secretKeyRef:
+          name: coder-forgejo-external-auth
+          key: client-id
+    - name: CODER_EXTERNAL_AUTH_0_CLIENT_SECRET
+      valueFrom:
+        secretKeyRef:
+          name: coder-forgejo-external-auth
+          key: client-secret
+    - name: CODER_EXTERNAL_AUTH_0_AUTH_URL
+      value: http://forgejo-factory.localhost/login/oauth/authorize
+    - name: CODER_EXTERNAL_AUTH_0_TOKEN_URL
+      value: http://forgejo-factory.localhost/login/oauth/access_token
+    - name: CODER_EXTERNAL_AUTH_0_VALIDATE_URL
+      value: http://forgejo-factory.localhost/api/v1/user
+    - name: CODER_EXTERNAL_AUTH_0_SCOPES
+      value: read:repository write:repository read:user
+    - name: CODER_EXTERNAL_AUTH_0_REGEX
+      value: ^(?:forgejo-factory\.localhost|forgejo\.factory-platform\.svc\.cluster\.local)$
+    - name: CODER_EXTERNAL_AUTH_0_PKCE_METHODS
+      value: S256
+    - name: CODER_DISABLE_PASSWORD_AUTH
+      value: "true"
+    - name: CODER_SESSION_DURATION
+      value: 24h
+    - name: CODER_DISABLE_SESSION_EXPIRY_REFRESH
+      value: "false"
+    - name: CODER_TELEMETRY_ENABLE
+      value: "false"
+    - name: CODER_UPDATE_CHECK
+      value: "false"
+    - name: CODER_OAUTH2_GITHUB_DEFAULT_PROVIDER_ENABLE
+      value: "false"
+    - name: CODER_AI_GATEWAY_ENABLED
+      value: "true"
+    - name: CODER_DISABLE_TEMPLATE_BUILDER
+      value: "true"
+    - name: CODER_DISABLE_WORKSPACE_SHARING
+      value: "false"
+    - name: CODER_DISABLE_CHAT_SHARING
+      value: "true"
+    - name: CODER_DISABLE_OWNER_WORKSPACE_ACCESS
+      value: "true"
+    - name: CODER_ALLOW_WORKSPACE_RENAMES
+      value: "false"
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: "2"
+      memory: 2Gi

@@ -1,0 +1,47 @@
+# Unless explicitly acquired and licensed from Licensor under another license, the contents of this file are subject to the Reciprocal Public License ("RPL") Version 1.5, or subsequent versions as allowed by the RPL, and You may not copy or use this file in either source code or executable form, except in compliance with the terms and conditions of the RPL.
+#
+# All software distributed under the RPL is provided strictly on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED, AND LICENSOR HEREBY DISCLAIMS ALL SUCH WARRANTIES, INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT, OR NON-INFRINGEMENT. See the RPL for specific language governing rights and limitations under the RPL.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: agentic-software-factory
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: agentic-software-factory
+resources:
+  - namespace.yaml
+  - service-account.yaml
+  - service.yaml
+  - deployment.yaml
+  - migration-job.yaml
+  - ingress.yaml
+  - network-policy.yaml
+  - policy.yaml
+  - external-secret.yaml
+  - monitoring.yaml
+configMapGenerator:
+  - name: factory-config
+    literals:
+      - AUTH_ISSUER=https://factory.example.invalid
+      - AUTH_TRUSTED_ORIGINS=https://factory.example.invalid,https://coder.example.invalid,https://forgejo.example.invalid
+      - ALLOWED_ORIGINS=https://factory.example.invalid
+      - AUTH_MODE=entra
+      - ENTRA_TENANT_ID=00000000-0000-0000-0000-000000000000
+      - FORGEJO_URL=https://forgejo.example.invalid
+      - FORGEJO_PUBLIC_URL=https://forgejo.example.invalid
+      - FORGEJO_OWNER=replace-me
+      - FORGEJO_AUTHORIZED_OWNERS=replace-me
+      - FORGEJO_BRANCH=main
+      - FACTORY_TENANT_ID=replace-me
+      - FACTORY_WORKSPACE_NAMESPACE=replace-me-workspaces
+      - CODER_URL=https://coder.example.invalid
+      - CODER_PUBLIC_URL=https://coder.example.invalid
+      - CODER_WILDCARD_ACCESS_URL=*.apps.coder.example.invalid
+      - CODER_MCP_URL=https://factory.example.invalid/mcp
+      - FORGEJO_OIDC_COMPATIBILITY_MAJOR=15
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector.monitoring.svc.cluster.local:4318
+      - OTEL_SERVICE_NAME=agentic-software-factory-bff
+images:
+  - name: control-plane
+    newName: ghcr.io/replace-owner/replace-repository/control-plane
+    digest: sha256:0000000000000000000000000000000000000000000000000000000000000000

@@ -1,0 +1,862 @@
+# Unless explicitly acquired and licensed from Licensor under another license, the contents of this file are subject to the Reciprocal Public License ("RPL") Version 1.5, or subsequent versions as allowed by the RPL, and You may not copy or use this file in either source code or executable form, except in compliance with the terms and conditions of the RPL.
+#
+# All software distributed under the RPL is provided strictly on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED, AND LICENSOR HEREBY DISCLAIMS ALL SUCH WARRANTIES, INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT, OR NON-INFRINGEMENT. See the RPL for specific language governing rights and limitations under the RPL.
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: factory-platform
+  labels:
+    factory.application/tenant: factory
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: factory-workspaces
+  labels:
+    factory.application/tenant: factory
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: tenant-default-deny
+  namespace: factory-workspaces
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: tenant-required-egress
+  namespace: factory-workspaces
+spec:
+  podSelector:
+    matchLabels:
+      factory.application/tenant: factory
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 169.254.0.0/16
+      ports:
+        - { protocol: TCP, port: 80 }
+        - { protocol: TCP, port: 443 }
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: factory-platform
+      ports:
+        - { protocol: TCP, port: 3000 }
+        - { protocol: TCP, port: 8080 }
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: coder
+      ports:
+        - { protocol: TCP, port: 80 }
+        - { protocol: TCP, port: 8080 }
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/component: controller
+              app.kubernetes.io/instance: ingress-nginx
+              app.kubernetes.io/name: ingress-nginx
+      ports:
+        - { protocol: TCP, port: 443 }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: forgejo-oidc-bootstrap
+  namespace: factory-platform
+  labels:
+    factory.application/rollout: forgejo
+  annotations:
+    factory.application/bootstrap-command: kubectl -n factory-platform exec deployment/forgejo -- /opt/factory/bootstrap-oidc.sh
+data:
+  bootstrap-oidc.sh: |
+    #!/bin/sh
+    set -eu
+
+    discovery_url="${FACTORY_OIDC_ISSUER%/}/.well-known/openid-configuration"
+    for value in "$FORGEJO_OWNER" "$FORGEJO_HUMAN_TEAM" "$FACTORY_TENANT_GROUP"; do
+      case "$value" in *[!A-Za-z0-9_.:-]*) echo "Forgejo OIDC group mapping names contain invalid characters" >&2; exit 1;; esac
+    done
+    group_team_map="$(printf '{"%s":{"%s":["%s"]}' "$FACTORY_TENANT_GROUP" "$FORGEJO_OWNER" "$FORGEJO_HUMAN_TEAM")"
+    team_objects="$(printf '%s' "$FACTORY_TEAM_BOARDS" | sed 's/^[[:space:]]*\[//;s/\][[:space:]]*$//;s/}[[:space:]]*,[[:space:]]*{/}|{/g' | tr '|' '\n')"
+    while IFS= read -r team_object; do
+      [ -n "$team_object" ] || continue
+      slug="$(printf '%s' "$team_object" | sed -n 's/.*"slug"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')"
+      group="$(printf '%s' "$team_object" | sed -n 's/.*"group"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')"
+      [ -n "$slug" ] && [ -n "$group" ] || { echo "FACTORY_TEAM_BOARDS must contain slug and group strings" >&2; exit 1; }
+      for value in "$slug" "$group"; do
+        case "$value" in *[!A-Za-z0-9_.:-]*) echo "Forgejo OIDC group mapping names contain invalid characters" >&2; exit 1;; esac
+      done
+      group_team_map="$group_team_map$(printf ',"%s":{"%s":["%s-%s"]}' "$group" "$FORGEJO_OWNER" "$FORGEJO_HUMAN_TEAM" "$slug")"
+    done <<EOF
+    $team_objects
+    EOF
+    group_team_map="$group_team_map}"
+    config=/var/lib/gitea/custom/conf/app.ini
+    auth_id="$(
+      forgejo --config "$config" admin auth list |
+        while IFS="$(printf '\t')" read -r id name type enabled; do
+          if [ "$name" = Factory ] && [ "$type" = OAuth2 ]; then
+            printf '%s' "$id"
+            break
+          fi
+        done
+    )"
+
+    if [ -n "$auth_id" ]; then
+      forgejo --config "$config" admin auth update-oauth \
+        --id "$auth_id" \
+        --name Factory \
+        --provider openidConnect \
+        --key "$FORGEJO_OIDC_CLIENT_ID" \
+        --secret "$FORGEJO_OIDC_CLIENT_SECRET" \
+        --auto-discover-url "$discovery_url" \
+        --scopes profile \
+        --scopes email \
+        --scopes groups \
+        --group-claim-name groups \
+        --group-team-map "$group_team_map" \
+        --group-team-map-removal
+    else
+      forgejo --config "$config" admin auth add-oauth \
+        --name Factory \
+        --provider openidConnect \
+        --key "$FORGEJO_OIDC_CLIENT_ID" \
+        --secret "$FORGEJO_OIDC_CLIENT_SECRET" \
+        --auto-discover-url "$discovery_url" \
+        --scopes profile \
+        --scopes email \
+        --scopes groups \
+        --group-claim-name groups \
+        --group-team-map "$group_team_map" \
+        --group-team-map-removal
+    fi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: forgejo-data
+  namespace: factory-platform
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: factory-postgres
+  namespace: factory-platform
+spec:
+  instances: 1
+  probes:
+    liveness:
+      failureThreshold: 6
+      periodSeconds: 10
+      timeoutSeconds: 5
+      isolationCheck:
+        enabled: false
+    readiness:
+      failureThreshold: 3
+      periodSeconds: 5
+      timeoutSeconds: 5
+  storage:
+    size: 2Gi
+  bootstrap:
+    initdb:
+      database: factory
+      owner: factory
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: factory-tls
+  namespace: factory-platform
+  labels:
+    factory.application/rollout: factory
+spec:
+  secretName: factory-tls
+  dnsNames:
+    - factory.localhost
+    - forgejo-factory.localhost
+    - forgejo
+    - forgejo.factory-platform
+    - forgejo.factory-platform.svc
+    - forgejo.factory-platform.svc.cluster.local
+  issuerRef:
+    name: aaf-local-ca
+    kind: ClusterIssuer
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: factory-ca
+  namespace: factory-workspaces
+  labels:
+    factory.application/rollout: factory
+spec:
+  secretName: factory-ca
+  dnsNames:
+    - forgejo.factory-platform.svc.cluster.local
+  issuerRef:
+    name: aaf-local-ca
+    kind: ClusterIssuer
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: forgejo
+  namespace: factory-platform
+  labels:
+    factory.application/rollout: forgejo
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: forgejo
+  template:
+    metadata:
+      labels:
+        app: forgejo
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: configure-oidc
+          image: codeberg.org/forgejo/forgejo:15.0.3-rootless@sha256:e7a59d193ad5e8bde19cffc68f26ee00e77a5b0014e95433eed5038f0c3888da
+          command: [/bin/sh, -ec]
+          args:
+            - |
+              /usr/local/bin/docker-entrypoint.sh forgejo migrate
+          env:
+            - name: FORGEJO__database__DB_TYPE
+              value: sqlite3
+            - name: FORGEJO__database__PATH
+              value: /var/lib/gitea/data/gitea.db
+            - name: FORGEJO__security__INSTALL_LOCK
+              value: "true"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/gitea
+      containers:
+        - name: forgejo
+          image: codeberg.org/forgejo/forgejo:15.0.3-rootless@sha256:e7a59d193ad5e8bde19cffc68f26ee00e77a5b0014e95433eed5038f0c3888da
+          env:
+            - name: FORGEJO__database__DB_TYPE
+              value: sqlite3
+            - name: FORGEJO__database__PATH
+              value: /var/lib/gitea/data/gitea.db
+            - name: FORGEJO__security__INSTALL_LOCK
+              value: "true"
+            - name: FORGEJO__server__ROOT_URL
+              value: http://forgejo-factory.localhost/
+            - name: FORGEJO__server__HTTP_PORT
+              value: "3000"
+            - name: FORGEJO__server__PROTOCOL
+              value: https
+            - name: FORGEJO__server__CERT_FILE
+              value: /etc/factory-ca/tls.crt
+            - name: FORGEJO__server__KEY_FILE
+              value: /etc/factory-ca/tls.key
+            - name: FORGEJO__oauth2_client__OPENID_CONNECT_SCOPES
+              value: profile email groups
+            - name: FORGEJO__oauth2_client__ENABLE_AUTO_REGISTRATION
+              value: "true"
+            - name: FORGEJO__oauth2_client__USERNAME
+              value: preferred_username
+            - name: FORGEJO__oauth2_client__ACCOUNT_LINKING
+              value: disabled
+            - name: FORGEJO__service__DISABLE_REGISTRATION
+              value: "false"
+            - name: FORGEJO__service__ALLOW_ONLY_EXTERNAL_REGISTRATION
+              value: "true"
+            - name: FORGEJO__service__ENABLE_INTERNAL_SIGNIN
+              value: "false"
+            - name: FORGEJO__service__ENABLE_BASIC_AUTHENTICATION
+              value: "false"
+            - name: FORGEJO__session__SESSION_LIFE_TIME
+              value: "86400"
+            - name: FORGEJO__session__COOKIE_SECURE
+              value: "false"
+            - name: FACTORY_OIDC_ISSUER
+              value: http://factory.localhost
+            - name: SSL_CERT_FILE
+              value: /etc/factory-ca/ca.crt
+            - name: FORGEJO_OIDC_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: factory-auth
+                  key: forgejo-client-id
+            - name: FORGEJO_OIDC_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: factory-auth
+                  key: forgejo-client-secret
+            - name: FORGEJO_OIDC_COMPATIBILITY_MAJOR
+              value: "15"
+            - name: FORGEJO_OWNER
+              value: factory
+            - name: FORGEJO_HUMAN_TEAM
+              value: factory-users
+            - name: FACTORY_TENANT_GROUP
+              value: tenant-factory
+            - name: FACTORY_TEAM_BOARDS
+              value: '[{"slug":"platform","displayName":"Platform","group":"team-platform"}]'
+          ports:
+            - name: http
+              containerPort: 3000
+          readinessProbe:
+            httpGet:
+              path: /api/healthz
+              port: http
+              scheme: HTTPS
+            periodSeconds: 5
+          startupProbe:
+            httpGet:
+              path: /api/healthz
+              port: http
+              scheme: HTTPS
+            failureThreshold: 60
+            periodSeconds: 2
+          livenessProbe:
+            httpGet:
+              path: /api/healthz
+              port: http
+              scheme: HTTPS
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/gitea
+            - name: oidc-bootstrap
+              mountPath: /opt/factory
+              readOnly: true
+            - name: factory-ca
+              mountPath: /etc/factory-ca
+              readOnly: true
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: forgejo-data
+        - name: oidc-bootstrap
+          configMap:
+            name: forgejo-oidc-bootstrap
+            defaultMode: 0555
+        - name: factory-ca
+          secret:
+            secretName: factory-tls
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: forgejo
+  namespace: factory-platform
+spec:
+  selector:
+    app: forgejo
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: forgejo
+  namespace: factory-platform
+  annotations:
+    nginx.ingress.kubernetes.io/backend-protocol: HTTPS
+    nginx.ingress.kubernetes.io/proxy-body-size: 8m
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: forgejo-factory.localhost
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: forgejo
+                port:
+                  name: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agentic-software-factory
+  namespace: factory-platform
+  labels:
+    factory.application/rollout: factory
+spec:
+  replicas: 0
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: agentic-software-factory
+  template:
+    metadata:
+      labels:
+        app: agentic-software-factory
+    spec:
+      initContainers:
+        - name: migrate
+          image: dev.local/agentic-software-factory-bff:0.1.0-local
+          imagePullPolicy: IfNotPresent
+          command: [/bin/sh, -ec]
+          args:
+            - bun dist/db/run-migrations.js && bun dist/bootstrap-users.js
+          env:
+            - name: HOME
+              value: /tmp
+            - name: XDG_CACHE_HOME
+              value: /tmp/.cache
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: factory-postgres-app
+                  key: uri
+            - name: FACTORY_TENANT_GROUP
+              value: tenant-factory
+            - name: FACTORY_BUSINESS_GROUP
+              value: tenant-factory-business
+            - name: FACTORY_ADMIN_GROUP
+              value: tenant-factory-admin
+            - name: FACTORY_DEVELOPER_GROUP
+              value: tenant-factory-developer
+            - name: FACTORY_TEAM_BOARDS
+              value: '[{"slug":"platform","displayName":"Platform","group":"team-platform"}]'
+            - name: AUTH_E2E_BUSINESS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: factory-auth
+                  key: e2e-business-password
+            - name: AUTH_E2E_DEVELOPER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: factory-auth
+                  key: e2e-developer-password
+            - name: AUTH_BOOTSTRAP_USER_EMAIL
+              valueFrom:
+                secretKeyRef:
+                  name: factory-auth
+                  key: bootstrap-user-email
+            - name: AUTH_BOOTSTRAP_USER_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: factory-auth
+                  key: bootstrap-user-name
+            - name: AUTH_BOOTSTRAP_USER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: factory-auth
+                  key: bootstrap-user-password
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: temporary-files
+              mountPath: /tmp
+      containers:
+        - name: bff
+          image: dev.local/agentic-software-factory-bff:0.1.0-local
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: HOME
+              value: /tmp
+            - name: XDG_CACHE_HOME
+              value: /tmp/.cache
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: factory-postgres-app
+                  key: uri
+            - name: AUTH_ISSUER
+              value: http://factory.localhost
+            - name: AUTH_MODE
+              value: local
+            - name: AUTH_TRUSTED_ORIGINS
+              value: http://factory.localhost,http://coder.localhost,http://forgejo-factory.localhost
+            - name: ALLOWED_ORIGINS
+              value: http://factory.localhost
+            - name: TRUSTED_PROXY_CIDRS
+              value: 192.168.194.0/25
+            - name: LOCAL_AUTH_EMAIL
+              valueFrom:
+                secretKeyRef:
+                  name: factory-auth
+                  key: bootstrap-user-email
+            - name: LOCAL_AUTH_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: factory-auth
+                  key: bootstrap-user-password
+            - name: BETTER_AUTH_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: factory-auth
+                  key: better-auth-secret
+            - name: CODER_OIDC_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: factory-auth
+                  key: coder-client-id
+            - name: CODER_OIDC_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: factory-auth
+                  key: coder-client-secret
+            - name: CODER_OIDC_REDIRECT_URIS
+              value: http://coder.localhost/api/v2/users/oidc/callback
+            - name: CODER_OIDC_POST_LOGOUT_REDIRECT_URIS
+              value: http://coder.localhost
+            - name: FORGEJO_OIDC_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: factory-auth
+                  key: forgejo-client-id
+            - name: FORGEJO_OIDC_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: factory-auth
+                  key: forgejo-client-secret
+            - name: FORGEJO_OIDC_REDIRECT_URIS
+              value: http://forgejo-factory.localhost/user/oauth2/Factory/callback
+            - name: FORGEJO_OIDC_POST_LOGOUT_REDIRECT_URIS
+              value: http://forgejo-factory.localhost
+            - name: FORGEJO_OIDC_COMPATIBILITY_MAJOR
+              value: "15"
+            - name: FORGEJO_URL
+              value: https://forgejo.factory-platform.svc.cluster.local:3000
+            - name: SSL_CERT_FILE
+              value: /etc/factory-ca/ca.crt
+            - name: FORGEJO_PUBLIC_URL
+              value: http://forgejo-factory.localhost
+            - name: FORGEJO_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: factory-runtime
+                  key: forgejo-token
+            - name: FORGEJO_IMPLEMENTATION_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: factory-runtime
+                  key: forgejo-implementation-token
+            - name: FORGEJO_REVIEW_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: factory-runtime
+                  key: forgejo-review-token
+            - name: FORGEJO_IMPLEMENTATION_USER
+              value: factory-implementation
+            - name: FORGEJO_REVIEW_USER
+              value: factory-review
+            - name: FORGEJO_CLONE_USER
+              value: factory-clone
+            - name: FORGEJO_HUMAN_TEAM
+              value: factory-users
+            - name: FORGEJO_OWNER
+              value: factory
+            - name: FORGEJO_BRANCH
+              value: main
+            - name: FACTORY_TENANT_ID
+              value: factory
+            - name: FACTORY_TEAM_BOARDS
+              value: '[{"slug":"platform","displayName":"Platform","group":"team-platform"}]'
+            - name: FACTORY_WORKSPACE_NAMESPACE
+              value: factory-workspaces
+            - name: FACTORY_CODER_ORGANIZATION
+              value: default
+            - name: FACTORY_CODER_TEMPLATE
+              value: agentic-software-factory
+            - name: FACTORY_CODER_VERIFICATION_OWNER
+              value: factory-verification
+            - name: FACTORY_CODER_VERIFICATION_OWNER_ID
+              valueFrom:
+                secretKeyRef:
+                  name: factory-runtime
+                  key: coder-verification-owner-id
+            - name: FACTORY_CODER_STAGING_OWNER
+              value: factory-stage
+            - name: FACTORY_CODER_STAGING_OWNER_ID
+              valueFrom:
+                secretKeyRef:
+                  name: factory-runtime
+                  key: coder-staging-owner-id
+            - name: CODER_URL
+              value: http://coder.coder.svc.cluster.local
+            - name: CODER_PUBLIC_URL
+              value: http://coder.localhost
+            - name: CODER_WILDCARD_ACCESS_URL
+              value: "*.apps.coder.localhost"
+            - name: CODER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: factory-runtime
+                  key: coder-token
+            - name: CODER_MCP_URL
+              value: http://agentic-software-factory.factory-platform.svc.cluster.local:8080/mcp
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            timeoutSeconds: 3
+            periodSeconds: 5
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            failureThreshold: 60
+            timeoutSeconds: 2
+            periodSeconds: 2
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: factory-ca
+              mountPath: /etc/factory-ca
+              readOnly: true
+            - name: temporary-files
+              mountPath: /tmp
+      volumes:
+        - name: factory-ca
+          secret:
+            secretName: factory-tls
+            items:
+              - key: ca.crt
+                path: ca.crt
+        - name: temporary-files
+          emptyDir:
+            medium: Memory
+            sizeLimit: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: agentic-software-factory
+  namespace: factory-platform
+  labels:
+    factory.application/rollout: factory
+spec:
+  selector:
+    app: agentic-software-factory
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: agentic-software-factory-ingress
+  namespace: factory-platform
+  labels:
+    factory.application/rollout: factory
+spec:
+  podSelector:
+    matchLabels:
+      app: agentic-software-factory
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: forgejo
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: coder
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: coder
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/component: controller
+              app.kubernetes.io/instance: ingress-nginx
+              app.kubernetes.io/name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: agentic-software-factory-bootstrap
+  namespace: factory-platform
+  labels:
+    factory.application/rollout: factory
+spec:
+  publishNotReadyAddresses: true
+  selector:
+    app: agentic-software-factory
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: agentic-software-factory-mcp-not-public
+  namespace: factory-platform
+  labels:
+    factory.application/rollout: factory
+spec:
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: agentic-software-factory
+  namespace: factory-platform
+  labels:
+    factory.application/rollout: factory
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "900"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "900"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: coder.localhost
+      http:
+        paths:
+          - path: /__factory/logout
+            pathType: Exact
+            backend:
+              service:
+                name: agentic-software-factory
+                port:
+                  name: http
+    - host: forgejo-factory.localhost
+      http:
+        paths:
+          - path: /__factory/logout
+            pathType: Exact
+            backend:
+              service:
+                name: agentic-software-factory
+                port:
+                  name: http
+    - host: factory.localhost
+      http:
+        paths:
+          - path: /.well-known/openid-configuration
+            pathType: Exact
+            backend:
+              service:
+                name: agentic-software-factory-bootstrap
+                port:
+                  name: http
+          - path: /jwks
+            pathType: Exact
+            backend:
+              service:
+                name: agentic-software-factory-bootstrap
+                port:
+                  name: http
+          - path: /oauth2
+            pathType: Prefix
+            backend:
+              service:
+                name: agentic-software-factory-bootstrap
+                port:
+                  name: http
+          - path: /mcp
+            pathType: Exact
+            backend:
+              service:
+                name: agentic-software-factory-mcp-not-public
+                port:
+                  name: http
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: agentic-software-factory
+                port:
+                  name: http

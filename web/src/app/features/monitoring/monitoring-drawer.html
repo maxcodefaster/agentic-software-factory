@@ -1,0 +1,55 @@
+<!--
+Unless explicitly acquired and licensed from Licensor under another license, the contents of this file are subject to the Reciprocal Public License ("RPL") Version 1.5, or subsequent versions as allowed by the RPL, and You may not copy or use this file in either source code or executable form, except in compliance with the terms and conditions of the RPL.
+
+All software distributed under the RPL is provided strictly on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED, AND LICENSOR HEREBY DISCLAIMS ALL SUCH WARRANTIES, INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT, OR NON-INFRINGEMENT. See the RPL for specific language governing rights and limitations under the RPL.
+-->
+
+@if (open()) {
+  <factory-overlay variant="focus" [ariaLabel]="'monitoring.title' | transloco" panelClass="flex h-full w-full max-w-[82rem] flex-col overflow-hidden rounded-none border-0 p-0 sm:h-[calc(100vh-3rem)] sm:rounded-brand-xl sm:border" (dismiss)="closed.emit()">
+    <header class="flex flex-wrap items-center gap-(--spacing-brand-s) border-b border-brand-gray-200 px-(--spacing-brand-l) py-(--spacing-brand-m)">
+      <span class="factory-icon-tile"><factory-icon name="gauge" size="lg" /></span>
+      <div class="min-w-0 flex-1">
+        <span class="factory-section-label">{{ 'monitoring.section' | transloco }}</span>
+        <h2 class="text-title">{{ 'monitoring.title' | transloco }}</h2>
+      </div>
+      <button hlmBtn variant="ghost" size="icon" [attr.aria-label]="'monitoring.close' | transloco" (click)="closed.emit()"><factory-icon name="x" /></button>
+    </header>
+
+    <div class="flex-1 overflow-y-auto p-(--spacing-brand-s) sm:p-(--spacing-brand-l)">
+      <div class="mx-auto flex max-w-6xl flex-col gap-(--spacing-brand-l)">
+        <section class="flex justify-end">
+          <div class="flex items-center gap-(--spacing-brand-s)">
+            @if (monitoring(); as data) {
+              <span class="text-meta text-brand-gray-600">{{ 'monitoring.generated' | transloco }} {{ data.generatedAt | date:'medium':undefined:locale.active() }}</span>
+            }
+            <button hlmBtn variant="outline" size="sm" [disabled]="loading()" (click)="refresh()"><factory-icon [name]="loading() ? 'loader' : 'refresh-cw'" [class.animate-spin]="loading()" /> {{ 'monitoring.refresh' | transloco }}</button>
+          </div>
+        </section>
+
+        @if (loading() && !monitoring()) {
+          <factory-loading [text]="'monitoring.loading' | transloco" />
+        } @else if (loadFailed()) {
+          <factory-error [message]="'monitoring.loadFailed' | transloco" />
+        } @else if (monitoring(); as data) {
+          <section class="flex flex-col gap-(--spacing-brand-s)" aria-labelledby="monitoring-workspaces">
+            <div class="flex items-end justify-between gap-(--spacing-brand-s)"><div><span class="factory-section-label">{{ 'monitoring.workspaceSection' | transloco }}</span><h3 id="monitoring-workspaces" class="text-title">{{ 'monitoring.workspaceCount' | transloco:{ count: data.workspaces.count } }}</h3></div></div>
+            @if (!data.workspaces.available) {
+              <div class="factory-card text-sm text-brand-gray-600" role="status">{{ 'monitoring.workspacesUnavailable' | transloco }}</div>
+            } @else if (data.workspaces.workspaces.length === 0) {
+              <div class="factory-card text-sm text-brand-gray-600" role="status">{{ 'monitoring.noWorkspaces' | transloco }}</div>
+            } @else {
+              <div class="grid gap-(--spacing-brand-s)">
+                @for (workspace of data.workspaces.workspaces; track workspace.id) {
+                  <article class="factory-card grid gap-(--spacing-brand-m) lg:grid-cols-[minmax(14rem,1.4fr)_minmax(12rem,0.8fr)] lg:items-center">
+                    <div class="min-w-0"><div class="mb-(--spacing-brand-xs) flex flex-wrap gap-(--spacing-brand-xxs)"><span class="factory-badge factory-badge-neutral">{{ ('monitoring.kind.' + workspace.kind) | transloco }}</span><span class="factory-badge" [class.factory-badge-success]="workspace.healthy" [class.factory-badge-danger]="!workspace.healthy">{{ (workspace.healthy ? 'monitoring.healthy' : 'monitoring.unhealthy') | transloco }}</span>@if (workspace.outdated) { <span class="factory-badge factory-badge-warning">{{ 'monitoring.outdated' | transloco }}</span> }</div><h4 class="truncate text-title">{{ workspace.name }}</h4><p class="truncate text-meta text-brand-gray-600">{{ workspace.owner }} · {{ workspace.template }} · {{ workspace.status }}</p></div>
+                    <div><span class="factory-section-label">{{ 'monitoring.lastUsed' | transloco }}</span><p class="text-sm text-brand-gray-700">{{ workspace.lastUsedAt | date:'medium':undefined:locale.active() }}</p></div>
+                  </article>
+                }
+              </div>
+            }
+          </section>
+        }
+      </div>
+    </div>
+  </factory-overlay>
+}

@@ -1,0 +1,36 @@
+{
+  "name": "agentic-software-factory",
+  "version": "0.1.0",
+  "license": "RPL-1.5",
+  "private": true,
+  "type": "module",
+  "packageManager": "bun@1.3.14",
+  "workspaces": [
+    "apps/bff",
+    "web",
+    "packages/api-contracts",
+    "packages/design-system"
+  ],
+  "overrides": {
+    "esbuild": "0.28.2",
+    "postcss": "8.5.26",
+    "vite": "8.2.2"
+  },
+  "scripts": {
+    "factory": "bun scripts/factory.ts",
+    "factory:test": "bun test scripts/factory.test.ts scripts/factory/reconcile-coder.test.ts",
+    "bff:build": "bun run --filter=@agentic-software-factory/bff build",
+    "bff:test": "bun run --filter=@agentic-software-factory/bff test",
+    "bff:typecheck": "bun run --filter=@agentic-software-factory/bff typecheck",
+    "coder:pins:check": "bun scripts/check-coder-pins.ts",
+    "license:check": "bun scripts/license-check.ts",
+    "web:dev": "bun run --filter=@agentic-software-factory/web dev",
+    "web:build": "bun run --filter=@agentic-software-factory/web build",
+    "web:test": "bun run --filter=@agentic-software-factory/web test",
+    "web:typecheck": "bun run --filter=@agentic-software-factory/web typecheck"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.10.2",
+    "playwright": "1.62.1"
+  }
+}

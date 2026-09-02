@@ -1,0 +1,127 @@
+<!--
+Unless explicitly acquired and licensed from Licensor under another license, the contents of this file are subject to the Reciprocal Public License ("RPL") Version 1.5, or subsequent versions as allowed by the RPL, and You may not copy or use this file in either source code or executable form, except in compliance with the terms and conditions of the RPL.
+
+All software distributed under the RPL is provided strictly on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED, AND LICENSOR HEREBY DISCLAIMS ALL SUCH WARRANTIES, INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT, OR NON-INFRINGEMENT. See the RPL for specific language governing rights and limitations under the RPL.
+-->
+
+<div class="flex min-w-0 flex-col gap-(--spacing-brand-s)">
+  <!-- Ziel — the headline, the one line everyone actually reads. -->
+  <div
+    class="font-semibold leading-snug break-words text-balance text-brand-gray-900"
+    [class.text-base]="!dense()"
+    [class.text-sm]="dense()"
+  >
+    {{ spec().goal }}
+  </div>
+
+  <!-- Affected users — short labels, the only true "chips" here. -->
+  @if (spec().users.length) {
+    <div class="flex flex-wrap items-center gap-(--spacing-brand-xxs)">
+      @for (u of spec().users; track u) {
+        <span class="factory-badge factory-badge-neutral"><factory-icon name="user" size="xs" /> {{ u }}</span>
+      }
+    </div>
+  }
+
+  <!-- Akzeptanzkriterien — the testable checklist (the scannable core). -->
+  @if (spec().acceptanceCriteria.length) {
+    <div class="flex min-w-0 flex-col gap-(--spacing-brand-xxs)">
+      <span class="factory-section-label">{{ 'card.acceptance' | transloco }}</span>
+      <ul class="flex flex-col gap-(--spacing-brand-xs) text-sm leading-relaxed text-brand-gray-700">
+        @for (a of spec().acceptanceCriteria; track a) {
+          <li class="flex min-w-0 gap-(--spacing-brand-xs)">
+            <factory-icon name="check" size="xs" class="mt-0.5 shrink-0 text-brand-success" />
+            <span class="min-w-0 break-words">
+              <span>{{ a }}</span>
+            </span>
+          </li>
+        }
+      </ul>
+    </div>
+  }
+
+  <!-- Priorität (MoSCoW) — a compact list with a per-item tag, so long entries
+       read cleanly instead of overflowing a pill. -->
+  @if (spec().moscow.must.length || spec().moscow.should.length || spec().moscow.could.length) {
+    <div class="flex min-w-0 flex-col gap-(--spacing-brand-xxs)">
+      <span class="factory-section-label">{{ 'card.priority' | transloco }}</span>
+      <ul class="flex flex-col gap-(--spacing-brand-xs) text-sm leading-relaxed">
+        @for (m of spec().moscow.must; track m) {
+          <li class="flex min-w-0 gap-(--spacing-brand-xs)">
+            <span class="factory-badge factory-badge-warning mt-px shrink-0">{{ 'card.must' | transloco }}</span>
+            <span class="min-w-0 break-words text-brand-gray-700">{{ m }}</span>
+          </li>
+        }
+        @for (s of spec().moscow.should; track s) {
+          <li class="flex min-w-0 gap-(--spacing-brand-xs)">
+            <span class="factory-badge factory-badge-neutral mt-px shrink-0">{{ 'card.should' | transloco }}</span>
+            <span class="min-w-0 break-words text-brand-gray-600">{{ s }}</span>
+          </li>
+        }
+        @for (c of spec().moscow.could; track c) {
+          <li class="flex min-w-0 gap-(--spacing-brand-xs)">
+            <span class="factory-badge factory-badge-neutral mt-px shrink-0">{{ 'card.could' | transloco }}</span>
+            <span class="min-w-0 break-words text-brand-gray-600">{{ c }}</span>
+          </li>
+        }
+      </ul>
+    </div>
+  }
+
+  <!-- Nicht-funktional — a compact muted list (entries are often full sentences). -->
+  @if (spec().nonFunctionalRequirements.length) {
+    <div class="flex min-w-0 flex-col gap-(--spacing-brand-xxs)">
+      <span class="factory-section-label">{{ 'card.nonFunctional' | transloco }}</span>
+      <ul class="flex flex-col gap-(--spacing-brand-xxs) text-sm leading-relaxed text-brand-gray-600">
+        @for (n of spec().nonFunctionalRequirements; track n) {
+          <li class="flex min-w-0 gap-(--spacing-brand-xs)">
+            <span class="mt-1.5 size-1 shrink-0 rounded-full bg-brand-gray-300"></span>
+            <span class="min-w-0 break-words">{{ n }}</span>
+          </li>
+        }
+      </ul>
+    </div>
+  }
+
+  <!-- User stories remain visible with the accepted requirement. -->
+  @if (spec().userStories.length) {
+    <div class="min-w-0">
+      <span class="factory-section-label">{{ 'factory.userView' | transloco }}</span>
+      <ul class="mt-(--spacing-brand-xs) flex flex-col gap-(--spacing-brand-xs)">
+        @for (u of spec().userStories; track u) {
+          <li
+            class="border-l-2 border-brand-mint-500/60 pl-(--spacing-brand-s) text-xs leading-relaxed break-words text-brand-gray-600"
+          >
+            <span>{{ u }}</span>
+          </li>
+        }
+      </ul>
+    </div>
+  }
+
+  <!-- Offene Fragen — what's still unresolved (only when present). -->
+  @if (spec().openQuestions.length) {
+    <div class="flex min-w-0 flex-col gap-(--spacing-brand-xxs)">
+      <span class="factory-section-label">{{ 'card.openQuestions' | transloco }}</span>
+      <ul class="flex flex-col gap-(--spacing-brand-xxs) text-meta leading-snug text-brand-gray-600">
+        @for (q of spec().openQuestions; track q) {
+          <li class="flex min-w-0 gap-(--spacing-brand-xs)">
+            <factory-icon name="triangle-alert" size="xs" class="mt-0.5 shrink-0 text-brand-gray-400" />
+            <span class="min-w-0 break-words">{{ q }}</span>
+          </li>
+        }
+      </ul>
+    </div>
+  }
+
+  @if (spec().nonGoals.length) {
+    <div class="flex min-w-0 flex-col gap-(--spacing-brand-xxs)">
+      <span class="factory-section-label">{{ 'factory.nonGoals' | transloco }}</span>
+      <ul class="flex flex-col gap-(--spacing-brand-xxs) text-meta leading-snug text-brand-gray-600">
+        @for (item of spec().nonGoals; track item) {
+          <li class="flex min-w-0 gap-(--spacing-brand-xs)"><span class="mt-1.5 size-1 shrink-0 rounded-full bg-brand-gray-300"></span><span class="min-w-0 break-words">{{ item }}</span></li>
+        }
+      </ul>
+    </div>
+  }
+</div>

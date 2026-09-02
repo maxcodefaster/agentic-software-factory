@@ -1,0 +1,21 @@
+#!/bin/sh
+# Unless explicitly acquired and licensed from Licensor under another license, the contents of this file are subject to the Reciprocal Public License ("RPL") Version 1.5, or subsequent versions as allowed by the RPL, and You may not copy or use this file in either source code or executable form, except in compliance with the terms and conditions of the RPL.
+#
+# All software distributed under the RPL is provided strictly on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED, AND LICENSOR HEREBY DISCLAIMS ALL SUCH WARRANTIES, INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT, OR NON-INFRINGEMENT. See the RPL for specific language governing rights and limitations under the RPL.
+
+set -eu
+state=${FACTORY_STATE_DIR:-/tmp}/inventory-api
+mkdir -p "$state"
+case "${1:-status}" in
+  start)
+    if test -s "$state/pid" && kill -0 "$(cat "$state/pid")" 2>/dev/null; then exit 0; fi
+    nohup bun run server.ts >"$state/service.log" 2>&1 &
+    printf '%s\n' "$!" >"$state/pid"
+    ;;
+  status) test -s "$state/pid" && kill -0 "$(cat "$state/pid")" ;;
+  watch) while ./servicectl status; do printf 'Inventory API running, pid %s\n' "$(cat "$state/pid")"; sleep 2; done ;;
+  logs) cat "$state/service.log" ;;
+  restart) ./servicectl stop; ./servicectl start ;;
+  stop) test ! -s "$state/pid" || kill "$(cat "$state/pid")" 2>/dev/null || true; rm -f "$state/pid" ;;
+  *) exit 2 ;;
+esac

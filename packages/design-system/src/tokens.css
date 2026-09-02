@@ -1,0 +1,254 @@
+/* AUTO-GENERATED from src/tokens.ts by scripts/generate.ts — DO NOT EDIT BY HAND.
+ * Edit the tokens in src/tokens.ts, then run `bun run generate`.
+ * Vanilla --brand-* custom properties; mount anywhere for the same look.
+ * The drift test (__tests__/tokens.test.ts) fails if this file is stale.
+ */
+:root {
+  /* Brand mint */
+  --brand-mint-50: #edfffb;
+  --brand-mint-100: #d2fff5;
+  --brand-mint-200: #a8f7e8;
+  --brand-mint-300: #7fead8;
+  --brand-mint-400: #65d9c4;
+  --brand-mint-500: #55ffd3;
+  --brand-mint-600: #35d3b0;
+  --brand-mint-700: #229f87;
+  --brand-mint-800: #197665;
+  --brand-mint-900: #115247;
+
+  /* Legacy yellow aliases; use --brand-mint-* in new CSS */
+  --brand-yellow-50: var(--brand-mint-50);
+  --brand-yellow-100: var(--brand-mint-100);
+  --brand-yellow-200: var(--brand-mint-200);
+  --brand-yellow-300: var(--brand-mint-300);
+  --brand-yellow-400: var(--brand-mint-400);
+  --brand-yellow-500: var(--brand-mint-500);
+  --brand-yellow-600: var(--brand-mint-600);
+  --brand-yellow-700: var(--brand-mint-700);
+  --brand-yellow-800: var(--brand-mint-800);
+  --brand-yellow-900: var(--brand-mint-900);
+
+  /* Neutrals — cool/blue-tinted ramp; 900 is the primary foreground */
+  --brand-gray-50: var(--brand-light-gray-50);
+  --brand-gray-100: var(--brand-light-gray-100);
+  --brand-gray-200: var(--brand-light-gray-200);
+  --brand-gray-300: var(--brand-light-gray-300);
+  --brand-gray-400: var(--brand-light-gray-400);
+  --brand-gray-500: var(--brand-light-gray-500);
+  --brand-gray-600: var(--brand-light-gray-600);
+  --brand-gray-700: var(--brand-light-gray-700);
+  --brand-gray-800: var(--brand-light-gray-800);
+  --brand-gray-900: var(--brand-light-gray-900);
+
+  /* Semantic */
+  --brand-success: var(--brand-light-success);
+  --brand-warning: var(--brand-light-warning);
+  --brand-warning-strong: var(--brand-light-warning-strong);
+  --brand-caution: var(--brand-light-caution);
+  --brand-danger: var(--brand-light-danger);
+  --brand-danger-dark: var(--brand-light-danger-dark);
+  --brand-info: var(--brand-light-info);
+
+  /* Typography */
+  --brand-font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --brand-font-slab: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --brand-font-mono: ui-monospace, 'SF Mono', 'Menlo', 'Monaco', 'Cascadia Mono', 'Roboto Mono', 'Courier New', monospace;
+
+  /* Radii */
+  --brand-radius-sm: 0.625rem;
+  --brand-radius-md: 0.9rem;
+  --brand-radius-lg: 1.25rem;
+  --brand-radius-xl: 1.5rem;
+  --brand-radius-2xl: 1.875rem;
+  --brand-radius-input: 0.75rem;
+
+  /* Semantic surfaces */
+  --brand-surface: var(--brand-light-surface);
+  --brand-surface-muted: var(--brand-light-surface-muted);
+  --brand-surface-sunken: var(--brand-light-surface-sunken);
+
+  /* Spacing — spacing scale: 2/4/8/16/24/32/48/64/128 */
+  --brand-spacing-xxxs: 0.125rem;
+  --brand-spacing-xxs: 0.25rem;
+  --brand-spacing-xs: 0.5rem;
+  --brand-spacing-s: 1rem;
+  --brand-spacing-m: 1.5rem;
+  --brand-spacing-l: 2rem;
+  --brand-spacing-xl: 3rem;
+  --brand-spacing-xxl: 4rem;
+  --brand-spacing-xxxl: 8rem;
+
+  /* Shadows */
+  --brand-shadow-xs: var(--brand-light-shadow-xs);
+  --brand-shadow-card: var(--brand-light-shadow-card);
+  --brand-shadow-md: var(--brand-light-shadow-md);
+  --brand-shadow-lift: var(--brand-light-shadow-lift);
+  --brand-shadow-header: var(--brand-light-shadow-header);
+  --brand-shadow-dropdown: var(--brand-light-shadow-dropdown);
+
+  /* light mode: color ramp */
+  --brand-light-gray-50: #f3f8f9;
+  --brand-light-gray-100: #e5eff1;
+  --brand-light-gray-200: #d3e1e4;
+  --brand-light-gray-300: #b7cbd0;
+  --brand-light-gray-400: #8ba1a9;
+  --brand-light-gray-500: #667e87;
+  --brand-light-gray-600: #465d66;
+  --brand-light-gray-700: #2d414b;
+  --brand-light-gray-800: #172631;
+  --brand-light-gray-900: #081016;
+
+  /* light mode: surfaces */
+  --brand-light-surface: #ffffff;
+  --brand-light-surface-muted: #f3f8f9;
+  --brand-light-surface-sunken: #e5eff1;
+
+  /* light mode: status colors */
+  --brand-light-success: #229f87;
+  --brand-light-warning: #b96820;
+  --brand-light-warning-strong: #914b0e;
+  --brand-light-caution: #d9912d;
+  --brand-light-danger: #cc3333;
+  --brand-light-danger-dark: #921100;
+  --brand-light-info: #368baa;
+
+  /* light mode: shadows */
+  --brand-light-shadow-xs: 0 1px 2px 0 rgba(24, 28, 40, 0.05);
+  --brand-light-shadow-card: 0 1px 2px 0 rgba(24, 28, 40, 0.04), 0 1px 1px 0 rgba(24, 28, 40, 0.03);
+  --brand-light-shadow-md: 0 4px 12px -2px rgba(24, 28, 40, 0.1), 0 2px 6px -2px rgba(24, 28, 40, 0.06);
+  --brand-light-shadow-lift: 0 12px 28px -8px rgba(24, 28, 40, 0.16), 0 4px 10px -4px rgba(24, 28, 40, 0.08);
+  --brand-light-shadow-header: 0 2px 4px -1px rgba(0, 0, 0, 0.2), 0 1px 10px 0 rgba(0, 0, 0, 0.12), 0 4px 5px 0 rgba(0, 0, 0, 0.14);
+  --brand-light-shadow-dropdown: 0 15px 15px -7px rgba(0, 0, 0, 0.2), 0 46px 46px 8px rgba(0, 0, 0, 0.12), 0 38px 38px 3px rgba(0, 0, 0, 0.14);
+
+  /* light mode: overlays */
+  --brand-light-scrim: rgb(24 28 40 / 0.42);
+
+  /* light mode: Spartan adapter contract */
+  --brand-light-spartan-background: #ffffff;
+  --brand-light-spartan-foreground: #181c28;
+  --brand-light-spartan-card: #ffffff;
+  --brand-light-spartan-card-foreground: #181c28;
+  --brand-light-spartan-popover: #ffffff;
+  --brand-light-spartan-popover-foreground: #181c28;
+  --brand-light-spartan-primary: #55ffd3;
+  --brand-light-spartan-primary-foreground: #081016;
+  --brand-light-spartan-secondary: #edf0f5;
+  --brand-light-spartan-secondary-foreground: #232838;
+  --brand-light-spartan-muted: #f5f7fa;
+  --brand-light-spartan-muted-foreground: #6b7385;
+  --brand-light-spartan-accent: #edf0f5;
+  --brand-light-spartan-accent-foreground: #181c28;
+  --brand-light-spartan-destructive: #cc3333;
+  --brand-light-spartan-border: #e3e7ee;
+  --brand-light-spartan-input: #e3e7ee;
+  --brand-light-spartan-ring: #181c28;
+  --brand-light-spartan-sidebar: #ffffff;
+  --brand-light-spartan-sidebar-foreground: #181c28;
+  --brand-light-spartan-sidebar-primary: #181c28;
+  --brand-light-spartan-sidebar-primary-foreground: #ffffff;
+  --brand-light-spartan-sidebar-accent: #edf0f5;
+  --brand-light-spartan-sidebar-accent-foreground: #181c28;
+  --brand-light-spartan-sidebar-border: #e3e7ee;
+  --brand-light-spartan-sidebar-ring: #181c28;
+
+  /* light mode: authentication pages */
+  --brand-light-auth-ink: #081016;
+  --brand-light-auth-muted: #465d66;
+  --brand-light-auth-canvas: #f3f8f9;
+  --brand-light-auth-surface: #ffffff;
+  --brand-light-auth-field: #f3f8f9;
+  --brand-light-auth-line: #d3e1e4;
+  --brand-light-auth-accent: #55ffd3;
+  --brand-light-auth-accent-border: #229f87;
+  --brand-light-auth-focus: #081016;
+  --brand-light-auth-danger: #921100;
+  --brand-light-auth-glow-accent: rgb(85 255 211 / 0.17);
+  --brand-light-auth-glow-info: rgb(54 139 170 / 0.1);
+  --brand-light-auth-shell-shadow: 0 1.5rem 5rem rgb(22 58 64 / 0.13);
+  --brand-light-auth-story-overlay: rgb(255 255 255 / 0.62);
+  --brand-light-auth-step-background: rgb(255 255 255 / 0.58);
+  --brand-light-auth-accent-shadow: rgb(34 159 135 / 0.2);
+
+  /* dark mode: color ramp */
+  --brand-dark-gray-50: #090c14;
+  --brand-dark-gray-100: #101522;
+  --brand-dark-gray-200: #23313d;
+  --brand-dark-gray-300: #354954;
+  --brand-dark-gray-400: #667e87;
+  --brand-dark-gray-500: #8ba1a9;
+  --brand-dark-gray-600: #b7cbd0;
+  --brand-dark-gray-700: #d3e1e4;
+  --brand-dark-gray-800: #e5eff1;
+  --brand-dark-gray-900: #f3f8f9;
+
+  /* dark mode: surfaces */
+  --brand-dark-surface: #101522;
+  --brand-dark-surface-muted: #090c14;
+  --brand-dark-surface-sunken: #070a11;
+
+  /* dark mode: status colors */
+  --brand-dark-success: #5cc463;
+  --brand-dark-warning: #e0a44a;
+  --brand-dark-warning-strong: #f0b563;
+  --brand-dark-caution: #f2a64d;
+  --brand-dark-danger: #ef5a5a;
+  --brand-dark-danger-dark: #ff8f7a;
+  --brand-dark-info: #71cfe5;
+
+  /* dark mode: shadows */
+  --brand-dark-shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
+  --brand-dark-shadow-card: 0 1px 2px 0 rgba(0, 0, 0, 0.4), 0 1px 1px 0 rgba(0, 0, 0, 0.3);
+  --brand-dark-shadow-md: 0 4px 12px -2px rgba(0, 0, 0, 0.5), 0 2px 6px -2px rgba(0, 0, 0, 0.4);
+  --brand-dark-shadow-lift: 0 14px 30px -10px rgba(0, 0, 0, 0.65), 0 6px 12px -6px rgba(0, 0, 0, 0.5);
+  --brand-dark-shadow-header: 0 2px 4px -1px rgba(0, 0, 0, 0.2), 0 1px 10px 0 rgba(0, 0, 0, 0.12), 0 4px 5px 0 rgba(0, 0, 0, 0.14);
+  --brand-dark-shadow-dropdown: 0 16px 40px -8px rgba(0, 0, 0, 0.65), 0 8px 16px -6px rgba(0, 0, 0, 0.5);
+
+  /* dark mode: overlays */
+  --brand-dark-scrim: rgb(0 0 0 / 0.6);
+
+  /* dark mode: Spartan adapter contract */
+  --brand-dark-spartan-background: #090c14;
+  --brand-dark-spartan-foreground: #e5eff1;
+  --brand-dark-spartan-card: #101522;
+  --brand-dark-spartan-card-foreground: #e5eff1;
+  --brand-dark-spartan-popover: #171e2e;
+  --brand-dark-spartan-popover-foreground: #e5eff1;
+  --brand-dark-spartan-primary: #55ffd3;
+  --brand-dark-spartan-primary-foreground: #081016;
+  --brand-dark-spartan-secondary: #171e2e;
+  --brand-dark-spartan-secondary-foreground: #e5eff1;
+  --brand-dark-spartan-muted: #101522;
+  --brand-dark-spartan-muted-foreground: #8ba1a9;
+  --brand-dark-spartan-accent: #18343d;
+  --brand-dark-spartan-accent-foreground: #e5eff1;
+  --brand-dark-spartan-destructive: #cc3333;
+  --brand-dark-spartan-border: #363d4e;
+  --brand-dark-spartan-input: #363d4e;
+  --brand-dark-spartan-ring: #55ffd3;
+  --brand-dark-spartan-sidebar: #090c14;
+  --brand-dark-spartan-sidebar-foreground: #e5eff1;
+  --brand-dark-spartan-sidebar-primary: #55ffd3;
+  --brand-dark-spartan-sidebar-primary-foreground: #081016;
+  --brand-dark-spartan-sidebar-accent: #101522;
+  --brand-dark-spartan-sidebar-accent-foreground: #e5eff1;
+  --brand-dark-spartan-sidebar-border: #363d4e;
+  --brand-dark-spartan-sidebar-ring: #f5b70a;
+
+  /* dark mode: authentication pages */
+  --brand-dark-auth-ink: #effbfa;
+  --brand-dark-auth-muted: #b9cdd1;
+  --brand-dark-auth-canvas: #071113;
+  --brand-dark-auth-surface: #0d191c;
+  --brand-dark-auth-field: #132226;
+  --brand-dark-auth-line: #304449;
+  --brand-dark-auth-accent: #55ffd3;
+  --brand-dark-auth-accent-border: #229f87;
+  --brand-dark-auth-focus: #83ffe0;
+  --brand-dark-auth-danger: #ffb4ab;
+  --brand-dark-auth-glow-accent: rgb(85 255 211 / 0.11);
+  --brand-dark-auth-glow-info: rgb(54 139 170 / 0.08);
+  --brand-dark-auth-shell-shadow: 0 1.5rem 5rem rgb(0 0 0 / 0.28);
+  --brand-dark-auth-story-overlay: rgb(85 255 211 / 0.035);
+  --brand-dark-auth-step-background: rgb(19 34 38 / 0.72);
+  --brand-dark-auth-accent-shadow: rgb(34 159 135 / 0.2);
+}

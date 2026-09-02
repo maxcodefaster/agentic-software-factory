@@ -1,0 +1,33 @@
+Agentic Software Factory
+Copyright 2026 Agentic Software Factory contributors
+
+This product is licensed under the Reciprocal Public License 1.5 (RPL-1.5).
+The complete license is in LICENSE and at https://spdx.org/licenses/RPL-1.5.html.
+
+This initial version is unreleased. Current development source is available at:
+https://github.com/maxcodefaster/agentic-software-factory
+
+RPL-1.5 applies reciprocal source-availability duties when the software or an
+Extension is Deployed, including internal organizational use other than Research
+or Personal Use. Section 6 requires Deployed Modifications, Derivative Works,
+and Required Components to be made available as Source Code through a publicly
+accessible electronic distribution mechanism. Distributors and deployers are
+responsible for reading and satisfying the complete license, including its
+notice, modification-description, attribution, and source-availability terms.
+
+Third-party dependencies and services retain their own copyright and license
+terms. Their inclusion does not relicense those works under RPL-1.5.
+Vendored Spartan UI-derived source remains under its upstream MIT license;
+its exact file scope, copyright notice, license text, and local modification
+summary are in THIRD_PARTY_NOTICES.
+
+The canonical Exhibit A notice is included inline in first-party distributed
+source and control files wherever their syntax supports comments. Generated
+files, third-party lockfiles, images and binary assets, JSON and other
+structurally commentless manifests, Markdown documentation, LICENSE copies,
+central notice files, and files whose structure cannot safely contain comments
+are covered here and by LICENSE-HEADER.txt instead. The canonical notice is:
+
+Unless explicitly acquired and licensed from Licensor under another license, the contents of this file are subject to the Reciprocal Public License ("RPL") Version 1.5, or subsequent versions as allowed by the RPL, and You may not copy or use this file in either source code or executable form, except in compliance with the terms and conditions of the RPL.
+
+All software distributed under the RPL is provided strictly on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED, AND LICENSOR HEREBY DISCLAIMS ALL SUCH WARRANTIES, INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT, OR NON-INFRINGEMENT. See the RPL for specific language governing rights and limitations under the RPL.

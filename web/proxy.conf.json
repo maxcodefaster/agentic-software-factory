@@ -1,0 +1,27 @@
+{
+  "/api": {
+    "target": "http://127.0.0.1:18080",
+    "secure": false,
+    "changeOrigin": false,
+    "logLevel": "debug",
+    "ws": true
+  },
+  "/auth": {
+    "target": "http://127.0.0.1:18080",
+    "secure": false,
+    "changeOrigin": false,
+    "logLevel": "debug"
+  },
+  "/sign-in": {
+    "target": "http://127.0.0.1:18080",
+    "secure": false,
+    "changeOrigin": false,
+    "logLevel": "debug"
+  },
+  "/oauth2": {
+    "target": "http://127.0.0.1:18080",
+    "secure": false,
+    "changeOrigin": false,
+    "logLevel": "debug"
+  }
+}

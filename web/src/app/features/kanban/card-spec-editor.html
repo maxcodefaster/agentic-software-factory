@@ -1,0 +1,24 @@
+<!--
+Unless explicitly acquired and licensed from Licensor under another license, the contents of this file are subject to the Reciprocal Public License ("RPL") Version 1.5, or subsequent versions as allowed by the RPL, and You may not copy or use this file in either source code or executable form, except in compliance with the terms and conditions of the RPL.
+
+All software distributed under the RPL is provided strictly on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED, AND LICENSOR HEREBY DISCLAIMS ALL SUCH WARRANTIES, INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT, OR NON-INFRINGEMENT. See the RPL for specific language governing rights and limitations under the RPL.
+-->
+
+<div class="flex min-w-0 flex-col gap-(--spacing-brand-s)">
+  @if (mode() !== 'details') {
+    <label class="flex flex-col gap-(--spacing-brand-xxs)"><span class="factory-section-label">{{ 'factory.goal' | transloco }}</span><textarea id="spec-goal" name="goal" autocomplete="off" rows="3" class="factory-input w-full resize-y text-sm" [value]="goal()" (input)="goal.set($any($event.target).value); emit()"></textarea></label>
+    <label class="flex flex-col gap-(--spacing-brand-xxs)"><span class="factory-section-label">{{ 'factory.criteriaLines' | transloco }}</span><textarea id="spec-criteria" name="criteria" autocomplete="off" rows="6" class="factory-input w-full resize-y text-sm" [value]="criteria()" (input)="criteria.set($any($event.target).value); emit()"></textarea></label>
+  }
+  @if (mode() !== 'primary') {
+      <div class="grid gap-(--spacing-brand-s)" [class.sm:grid-cols-2]="mode() === 'all'">
+        <label class="flex flex-col gap-(--spacing-brand-xxs)"><span class="factory-section-label">{{ 'factory.affectedPeople' | transloco }}</span><textarea id="spec-users" name="users" autocomplete="off" rows="3" class="factory-input w-full resize-y text-sm" [value]="users()" (input)="users.set($any($event.target).value); emit()"></textarea></label>
+        <label class="flex flex-col gap-(--spacing-brand-xxs)"><span class="factory-section-label">{{ 'factory.constraints' | transloco }}</span><textarea id="spec-constraints" name="constraints" autocomplete="off" rows="3" class="factory-input w-full resize-y text-sm" [value]="nonFunctional()" (input)="nonFunctional.set($any($event.target).value); emit()"></textarea></label>
+        <label class="flex flex-col gap-(--spacing-brand-xxs) sm:col-span-2"><span class="factory-section-label">{{ 'factory.userView' | transloco }}</span><textarea id="spec-user-stories" name="userStories" autocomplete="off" rows="4" class="factory-input w-full resize-y text-sm" [value]="stories()" (input)="stories.set($any($event.target).value); emit()"></textarea></label>
+        <label class="flex flex-col gap-(--spacing-brand-xxs)"><span class="factory-section-label">{{ 'card.must' | transloco }}</span><textarea id="spec-must" name="must" autocomplete="off" rows="3" class="factory-input w-full resize-y text-sm" [value]="must()" (input)="must.set($any($event.target).value); emit()"></textarea></label>
+        <label class="flex flex-col gap-(--spacing-brand-xxs)"><span class="factory-section-label">{{ 'card.should' | transloco }}</span><textarea id="spec-should" name="should" autocomplete="off" rows="3" class="factory-input w-full resize-y text-sm" [value]="should()" (input)="should.set($any($event.target).value); emit()"></textarea></label>
+        <label class="flex flex-col gap-(--spacing-brand-xxs)"><span class="factory-section-label">{{ 'card.could' | transloco }}</span><textarea id="spec-could" name="could" autocomplete="off" rows="3" class="factory-input w-full resize-y text-sm" [value]="could()" (input)="could.set($any($event.target).value); emit()"></textarea></label>
+        <label class="flex flex-col gap-(--spacing-brand-xxs)"><span class="factory-section-label">{{ 'factory.nonGoals' | transloco }}</span><textarea id="spec-non-goals" name="nonGoals" autocomplete="off" rows="3" class="factory-input w-full resize-y text-sm" [value]="nonGoals()" (input)="nonGoals.set($any($event.target).value); emit()"></textarea></label>
+        <label class="flex flex-col gap-(--spacing-brand-xxs) sm:col-span-2"><span class="factory-section-label">{{ 'factory.openQuestions' | transloco }}</span><textarea id="spec-open-questions" name="openQuestions" autocomplete="off" rows="3" class="factory-input w-full resize-y text-sm" [value]="questions()" (input)="questions.set($any($event.target).value); emit()"></textarea></label>
+      </div>
+  }
+</div>

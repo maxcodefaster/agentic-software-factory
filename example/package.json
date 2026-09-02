@@ -1,0 +1,59 @@
+{
+  "name": "agentic-software-factory-example",
+  "version": "0.1.0",
+  "description": "Example System built with TanStack Start.",
+  "private": true,
+  "license": "RPL-1.5",
+  "homepage": "https://github.com/maxcodefaster/agentic-software-factory/tree/main/example#readme",
+  "repository": "https://github.com/maxcodefaster/agentic-software-factory/tree/main/example",
+  "bugs": "https://github.com/maxcodefaster/agentic-software-factory/issues",
+  "type": "module",
+  "packageManager": "bun@1.3.14",
+  "scripts": {
+    "setup": "bun scripts/setup.ts",
+    "dev": "vite dev --host 0.0.0.0 --port 4173",
+    "build": "vite build",
+    "start": "bun scripts/start.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome lint .",
+    "format:check": "biome format .",
+    "test": "bun test",
+    "test:devcontainer": "sh scripts/devcontainer-runtime.sh",
+    "test:devcontainer:verification": "sh scripts/devcontainer-verification-runtime.sh",
+    "audit": "bun audit",
+    "check": "bun run lint && bun run format:check && bun run typecheck && bun test && bun run build",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "bun scripts/migrate.ts"
+  },
+  "overrides": {
+    "esbuild": "0.25.12"
+  },
+  "dependencies": {
+    "@tanstack/react-router": "1.170.32",
+    "@tanstack/react-start": "1.168.49",
+    "@better-auth/drizzle-adapter": "1.7.1",
+    "better-auth": "1.7.1",
+    "class-variance-authority": "0.7.1",
+    "clsx": "2.1.1",
+    "drizzle-orm": "0.45.2",
+    "lucide-react": "1.34.0",
+    "postgres": "3.4.9",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "tailwind-merge": "3.6.0",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.10",
+    "@playwright/test": "1.62.1",
+    "@tailwindcss/vite": "4.3.3",
+    "@types/bun": "1.3.0",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.5",
+    "@vitejs/plugin-react": "6.1.0",
+    "drizzle-kit": "0.31.10",
+    "tailwindcss": "4.3.3",
+    "typescript": "6.0.3",
+    "vite": "8.2.2"
+  }
+}

@@ -1,0 +1,42 @@
+# Unless explicitly acquired and licensed from Licensor under another license, the contents of this file are subject to the Reciprocal Public License ("RPL") Version 1.5, or subsequent versions as allowed by the RPL, and You may not copy or use this file in either source code or executable form, except in compliance with the terms and conditions of the RPL.
+#
+# All software distributed under the RPL is provided strictly on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED, AND LICENSOR HEREBY DISCLAIMS ALL SUCH WARRANTIES, INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT, OR NON-INFRINGEMENT. See the RPL for specific language governing rights and limitations under the RPL.
+
+[tools]
+node = "24"
+terraform = "1.13"
+helm = "4.0"
+bun = "1.3.14"
+actionlint = "1.7.7"
+
+[tasks.up]
+description = "Bring up the local stack for a system repository"
+run = "bun scripts/factory.ts up"
+
+[tasks.down]
+description = "Stop the local stack without deleting resources"
+run = "bun scripts/factory.ts down"
+
+[tasks.deploy]
+description = "Rebuild and roll out only the current Factory BFF and web"
+run = "bun scripts/factory.ts deploy"
+
+[tasks.prune]
+description = "Conservatively remove old local rollback and automation resources"
+run = "bun scripts/factory.ts prune"
+
+[tasks.reset]
+description = "Delete local stack data with an explicit guard"
+run = "bun scripts/factory.ts reset"
+
+[tasks.status]
+description = "Report live component state"
+run = "bun scripts/factory.ts status"
+
+[tasks.check]
+description = "Run package, example, Terraform, and contract checks"
+run = "bun scripts/factory.ts check"
+
+[tasks.e2e]
+description = "Run prepared-stack end-to-end checks"
+run = "bun scripts/factory.ts e2e"

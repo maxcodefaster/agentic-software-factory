@@ -1,0 +1,109 @@
+<!--
+Unless explicitly acquired and licensed from Licensor under another license, the contents of this file are subject to the Reciprocal Public License ("RPL") Version 1.5, or subsequent versions as allowed by the RPL, and You may not copy or use this file in either source code or executable form, except in compliance with the terms and conditions of the RPL.
+
+All software distributed under the RPL is provided strictly on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED, AND LICENSOR HEREBY DISCLAIMS ALL SUCH WARRANTIES, INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT, OR NON-INFRINGEMENT. See the RPL for specific language governing rights and limitations under the RPL.
+-->
+
+@if (!confirmingClose()) {
+  <factory-overlay variant="focus" [ariaLabel]="'board.openRequirement' | transloco: { title: title() }" panelClass="flex h-dvh w-full max-w-none flex-col overflow-hidden rounded-none border-0 shadow-brand-lift sm:h-[calc(100dvh-3rem)] sm:max-w-[76rem] sm:rounded-brand-2xl sm:border" (dismiss)="close()">
+    <header class="shrink-0 border-b border-brand-gray-100 px-(--spacing-brand-s) py-(--spacing-brand-s) sm:px-(--spacing-brand-l)">
+      <div class="flex items-start gap-(--spacing-brand-s)">
+        <div class="ticket-initial-focus min-w-0 flex-1" tabindex="-1" cdkFocusInitial>
+          <div class="flex items-center gap-(--spacing-brand-xs) text-micro text-brand-gray-600">
+            <span>#{{ card().number }}</span><span aria-hidden="true">·</span><span>{{ card().applications[0]?.name || ('factory.noLinkedApplication' | transloco) }}</span>
+          </div>
+          @if (titleEditable()) {
+            <textarea id="requirement-title" name="title" autocomplete="off" [attr.aria-label]="'factory.title' | transloco" rows="1" class="mt-(--spacing-brand-xxs) w-full resize-none border-0 bg-transparent p-0 text-display font-semibold tracking-[-.025em] text-brand-gray-900 outline-none [field-sizing:content]" [value]="title()" (input)="title.set($any($event.target).value)" (blur)="saveInPlace()"></textarea>
+          } @else {
+            <h1 class="mt-(--spacing-brand-xxs) text-display font-semibold tracking-[-.025em] text-brand-gray-900">{{ title() }}</h1>
+          }
+        </div>
+        <button hlmBtn variant="ghost" size="icon" class="shrink-0" [attr.aria-label]="'common.close' | transloco" (click)="close()"><factory-icon name="x" size="lg" /></button>
+      </div>
+      <div class="mt-(--spacing-brand-s)"><factory-journey-steps [current]="card().column" [nextUnlocked]="nextUnlocked()" [nextHint]="nextHint()" [compact]="true" /></div>
+    </header>
+
+    <div class="grid min-h-0 flex-1 grid-cols-1 overflow-y-auto lg:grid-cols-[minmax(0,1fr)_17rem] lg:overflow-hidden">
+      <div class="min-w-0 overflow-visible px-(--spacing-brand-s) py-(--spacing-brand-m) sm:px-(--spacing-brand-l) lg:overflow-y-auto">
+        @if (isIdea()) {
+          <section class="flex max-w-3xl flex-col gap-(--spacing-brand-s)" aria-labelledby="request-context-label">
+            <label id="request-context-label" for="requirement-idea" class="factory-section-label">{{ 'factory.originalIdea' | transloco }}</label>
+            <textarea id="requirement-idea" name="description" autocomplete="off" rows="9" class="factory-input w-full resize-y text-base leading-relaxed" [placeholder]="'factory.contextPlaceholder' | transloco" [value]="description()" [disabled]="!canManageRequirements()" (input)="description.set($any($event.target).value)" (blur)="saveInPlace()"></textarea>
+            <factory-card-applications [applications]="applications()" [value]="selectedApplications()" [editable]="false" />
+          </section>
+        }
+
+        @if (isRequirements()) {
+          @if (spec(); as specification) {
+            <section class="flex flex-col gap-(--spacing-brand-m)" aria-labelledby="specification-review-heading">
+              <div class="flex flex-wrap items-center justify-between gap-(--spacing-brand-s)">
+                <div class="flex items-center gap-(--spacing-brand-xs)">
+                  <span class="factory-badge" [class.factory-badge-success]="specificationState() === 'accepted'" [class.factory-badge-warning]="specificationState() !== 'accepted'"><factory-icon [name]="specificationState() === 'accepted' ? 'lock' : 'list-checks'" size="xs" /> {{ ('factory.specificationState.' + specificationState()) | transloco }}</span>
+                  <h3 id="specification-review-heading" class="text-xl font-semibold text-brand-gray-900">{{ 'factory.reviewSpecification' | transloco }}</h3>
+                </div>
+                <div class="flex gap-(--spacing-brand-xs)">@if (editingSpecification()) {<button hlmBtn size="sm" [disabled]="saving() || !specDirty()" (click)="saveDraft()"><factory-icon name="check" /> {{ 'factory.saveChanges' | transloco }}</button><button hlmBtn variant="ghost" size="sm" (click)="cancelSpecificationEdit()">{{ 'common.cancel' | transloco }}</button>} @else if (canManageRequirements() && specificationState() === 'proposed') {<button hlmBtn variant="outline" size="sm" (click)="editingSpecification.set(true)"><factory-icon name="pencil" /> {{ 'factory.editSpecification' | transloco }}</button>}</div>
+              </div>
+              @if (editingSpecification() && specificationState() === 'proposed') {<factory-card-spec-editor [spec]="specification" (changed)="onSpecChanged($event)" />} @else {<button type="button" class="w-full rounded-brand-lg border border-brand-gray-100 bg-brand-surface-muted/40 p-(--spacing-brand-m) text-left" [disabled]="!canManageRequirements() || specificationState() !== 'proposed'" (click)="editingSpecification.set(true)"><factory-card-spec [spec]="specification" /></button>}
+              <factory-card-applications [applications]="applications()" [value]="selectedApplications()" [editable]="false" />
+              <section class="border-t border-brand-gray-100 pt-(--spacing-brand-s)" [attr.aria-label]="'factory.interviewRecord' | transloco">
+                @defer (when isRequirements()) {
+                   <factory-card-interview [context]="context()" [cardId]="card().id" [canMutate]="canInterview()" (finalized)="onSpecFinalized($event)" (reopened)="onInterviewReopened()" (changed)="requirementsChanged.emit()" />
+                }
+              </section>
+            </section>
+          } @else {
+            @defer (when isRequirements()) {
+               <section class="max-w-3xl"><factory-card-interview [context]="context()" [cardId]="card().id" [canMutate]="canInterview()" (finalized)="onSpecFinalized($event)" (reopened)="onInterviewReopened()" (changed)="requirementsChanged.emit()" /></section>
+            }
+          }
+        }
+
+        @defer (when isImplementation() || isDone()) {
+          @if (isImplementation() || needsDeliveryReconciliation()) {
+            <factory-developer-mode [applications]="applications()" [selected]="selectedApplications()" [requirement]="card()" [canImplement]="canImplement()" [canReview]="canReview()" (changed)="deliveryChanged.emit()" />
+          }
+
+          @if (isDone() && !needsDeliveryReconciliation()) {
+            <factory-developer-mode [applications]="applications()" [selected]="selectedApplications()" [requirement]="card()" [canImplement]="false" [canReview]="false" [compact]="true" />
+          }
+        }
+
+        @if ((isImplementation() || isDone()) && spec(); as specification) {
+          <section class="mt-(--spacing-brand-l) flex flex-col gap-(--spacing-brand-s)" aria-labelledby="accepted-requirement-heading">
+            <h2 id="accepted-requirement-heading" class="text-lg font-semibold text-brand-gray-900">{{ 'factory.acceptedRequirement' | transloco }}</h2>
+            <factory-card-spec [spec]="specification" />
+          </section>
+        }
+
+        @if (saving()) {<p role="status" class="mt-(--spacing-brand-s) text-sm text-brand-gray-600"><factory-icon name="loader" class="animate-spin" /> {{ 'factory.saving' | transloco }}</p>}
+        @if (error(); as err) {<p role="alert" class="mt-(--spacing-brand-s) text-sm text-brand-danger">{{ err }}</p>}
+      </div>
+
+       <factory-ticket-dossier [context]="context()" [card]="card()" [assignee]="assignee().trim() || null" [editable]="canManageRequirements() && !isDone()" (assigneeChanged)="assign($event)" />
+    </div>
+
+    @if (canManageRequirements() && (isIdea() || isRequirements())) {
+    <footer class="flex shrink-0 flex-col gap-(--spacing-brand-xs) border-t border-brand-gray-100 bg-brand-surface px-(--spacing-brand-s) py-(--spacing-brand-xs) sm:flex-row sm:items-center sm:justify-between sm:px-(--spacing-brand-l)">
+      <div class="flex items-center gap-(--spacing-brand-xs)">
+        @if (canManageRequirements() && (isIdea() || isRequirements())) {
+          @if (confirmingDelete()) {<button hlmBtn variant="destructive" [disabled]="saving()" (click)="remove.emit()">{{ 'common.delete' | transloco }}</button><button hlmBtn variant="ghost" (click)="confirmingDelete.set(false)">{{ 'common.cancel' | transloco }}</button>}
+          @else {<button hlmBtn variant="ghost" size="icon" [attr.aria-label]="'factory.deleteRequirement' | transloco" [disabled]="saving()" (click)="confirmingDelete.set(true)"><factory-icon name="trash-2" /></button>}
+        }
+      </div>
+      <div class="flex flex-col items-stretch gap-(--spacing-brand-xs) sm:items-end">
+        @if (canManageRequirements() && nextHint(); as hint) {<span class="text-meta text-brand-gray-600"><factory-icon name="lock" size="xs" /> {{ hint }}</span>}
+        <div class="flex flex-wrap justify-end gap-(--spacing-brand-xs)">
+          @if (canManageRequirements() && isIdea()) {<button hlmBtn [disabled]="!nextUnlocked() || saving()" (click)="advanceStage()">{{ 'factory.startRequirementsEngineering' | transloco }} <factory-icon name="arrow-right" /></button>}
+          @else if (canManageRequirements() && isRequirements()) {<button hlmBtn [disabled]="!nextUnlocked() || specDirty() || saving()" (click)="advanceStage()">{{ 'factory.confirmRequirement' | transloco }} <factory-icon name="circle-check" /></button>}
+        </div>
+      </div>
+    </footer>
+    }
+  </factory-overlay>
+}
+
+@if (confirmingClose()) {
+  <factory-overlay role="alertdialog" [ariaLabel]="'factory.unsaved' | transloco" panelClass="flex w-full max-w-md flex-col gap-(--spacing-brand-s) p-(--spacing-brand-l)" (dismiss)="confirmingClose.set(false)">
+    <strong class="text-lg">{{ 'factory.keepEditing' | transloco }}?</strong><p class="text-sm text-brand-gray-600">{{ 'factory.unsaved' | transloco }}</p><div class="flex justify-end gap-(--spacing-brand-xs)"><button hlmBtn variant="ghost" (click)="confirmingClose.set(false)">{{ 'factory.keepEditing' | transloco }}</button><button hlmBtn variant="destructive" (click)="discardAndClose()">{{ 'factory.discard' | transloco }}</button></div>
+  </factory-overlay>
+}

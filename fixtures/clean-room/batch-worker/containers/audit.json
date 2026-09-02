@@ -1,0 +1,1 @@
+{"name":"Batch worker audit","image":"alpine:3.22","workspaceMount":"source=${localWorkspaceFolder},target=/workspaces/project,type=bind,readonly","workspaceFolder":"/workspaces/project","postStartCommand":"./workerctl start"}

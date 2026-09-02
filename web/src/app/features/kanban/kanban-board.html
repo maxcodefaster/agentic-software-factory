@@ -1,0 +1,71 @@
+<!--
+Unless explicitly acquired and licensed from Licensor under another license, the contents of this file are subject to the Reciprocal Public License ("RPL") Version 1.5, or subsequent versions as allowed by the RPL, and You may not copy or use this file in either source code or executable form, except in compliance with the terms and conditions of the RPL.
+
+All software distributed under the RPL is provided strictly on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED, AND LICENSOR HEREBY DISCLAIMS ALL SUCH WARRANTIES, INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT, OR NON-INFRINGEMENT. See the RPL for specific language governing rights and limitations under the RPL.
+-->
+
+<section class="factory-animate-in mx-auto flex w-full max-w-[96rem] flex-col gap-(--spacing-brand-l) px-(--spacing-brand-s) py-(--spacing-brand-l) sm:px-(--spacing-brand-l)">
+  @if (activeSystem(); as system) {
+    <header data-system-header class="flex flex-col border-b border-brand-gray-200 pb-(--spacing-brand-s)" [attr.aria-label]="'factory.systemContext' | transloco">
+      <div data-system-header-row="identity" class="flex flex-wrap items-start justify-between gap-(--spacing-brand-s) py-(--spacing-brand-xs)">
+        <div class="min-w-0 flex-1"><h1 class="truncate text-3xl font-semibold tracking-[-.035em] text-brand-gray-900">{{ system.name }}</h1>@if (system.description) {<p class="mt-1 max-w-3xl text-sm text-brand-gray-600">{{ system.description }}</p>}</div>
+        <nav class="flex flex-wrap items-center justify-end gap-(--spacing-brand-s) text-sm" [attr.aria-label]="'applications.systemLinks' | transloco">@if (system.repositoryUrl) {<a [href]="system.repositoryUrl" target="_blank" rel="noopener"><factory-icon name="git-branch" size="sm" /> {{ 'applications.openGit' | transloco }}</a>} @if (system.releasesUrl) {<a [href]="system.releasesUrl" target="_blank" rel="noopener"><factory-icon name="package" size="sm" /> {{ 'applications.release.open' | transloco }}</a>}</nav>
+      </div>
+      <div data-system-header-row="runtime" class="flex flex-wrap items-center justify-between gap-(--spacing-brand-s) border-t border-brand-gray-100 pt-(--spacing-brand-s)">
+        <div class="flex min-w-0 flex-wrap items-center gap-(--spacing-brand-xs)">
+          <span class="factory-section-label mr-(--spacing-brand-xxs)">{{ 'factory.systemApplications' | transloco }}</span>
+          @if (system.stagingUpdating) {<span class="factory-badge factory-badge-info"><factory-icon name="loader" class="animate-spin" size="xs" /> {{ 'applications.stagingUpdating' | transloco }}</span>}
+          @for (declared of system.declaredApps; track declared.slug) {
+            @if (runtimeApp(system, declared.slug); as app) {
+              <span data-staging-health [attr.data-staging-health]="app.health">
+                <a hlmBtn variant="ghost" size="sm" [href]="app.url" target="_blank" rel="noopener"><factory-icon [name]="appHealthIcon(app.health)" [class.animate-spin]="app.health === 'initializing'" size="sm" /> {{ declared.displayName }} · {{ ('factory.appHealth.' + app.health) | transloco }}</a>
+              </span>
+            } @else {<span class="factory-badge factory-badge-neutral"><factory-icon [name]="system.status === 'starting' ? 'loader' : 'circle-alert'" [class.animate-spin]="system.status === 'starting'" size="xs" /> {{ declared.displayName }} · {{ (system.status === 'starting' ? 'applications.stagingStarting' : 'applications.stagingUnavailable') | transloco }}</span>@if (system.stagingPhase === 'failed' && auth.canManageApplications()) {<button hlmBtn variant="outline" size="sm" type="button" (click)="retryStaging(system)">{{ 'applications.onboarding.retry' | transloco }}</button>}}
+          } @empty {<span class="text-sm text-brand-gray-500">{{ 'applications.empty' | transloco }}</span>}
+        </div>
+        <div class="flex flex-wrap items-center justify-end gap-(--spacing-brand-xs)">
+          @if (auth.canCreateDeveloperWorkspace()) {<button hlmBtn variant="ghost" size="sm" type="button" [disabled]="workspaceBusy()" (click)="openSystemIde(system)"><factory-icon [name]="workspaceBusy() ? 'loader' : 'code'" [class.animate-spin]="workspaceBusy()" size="sm" /> {{ 'applications.startOrOpenIde' | transloco }}</button>}
+          @if (auth.canCreateRequirements()) {<button hlmBtn size="sm" (click)="openAdd()"><factory-icon name="plus" size="sm" /> {{ 'factory.newRequirement' | transloco }}</button>}
+        </div>
+        @if (forgejoConnectUrl(); as connectUrl) {<p role="alert" class="basis-full text-right text-sm text-brand-gray-700">{{ 'applications.authorizeForgejo' | transloco }} <a class="font-semibold underline" [href]="connectUrl" target="_blank" rel="noopener">{{ 'applications.authorizeForgejoAction' | transloco }}</a></p>}
+        @else if (workspaceError(); as message) {<span role="alert" class="basis-full text-right text-sm text-brand-danger">{{ message }}</span>}
+      </div>
+    </header>
+  } @else {
+    <header><h1 class="text-3xl font-semibold tracking-[-.035em] text-brand-gray-900">{{ 'factory.noSystem' | transloco }}</h1></header>
+  }
+
+  @if (!auth.canManageRequirements() && !auth.canImplement() && !auth.canReviewImplementation()) {<p class="rounded-brand-md border border-brand-gray-200 bg-brand-surface-muted px-(--spacing-brand-s) py-(--spacing-brand-xs) text-sm text-brand-gray-600"><factory-icon name="lock" size="xs" /> {{ 'authorization.tenantReadOnly' | transloco }}</p>}
+  @if (notice(); as message) {<div role="status" class="flex items-center justify-between rounded-brand-md border border-brand-warning/30 bg-brand-warning/10 px-(--spacing-brand-s) py-(--spacing-brand-xs)"><span>{{ message }}</span><button hlmBtn variant="ghost" size="icon" [attr.aria-label]="'board.dismissNotice' | transloco" (click)="clearNotice()"><factory-icon name="x" /></button></div>}
+  @if (partialError(); as message) {<div role="alert" class="flex flex-wrap items-center justify-between gap-(--spacing-brand-xs) rounded-brand-md border border-brand-warning/30 bg-brand-warning/10 px-(--spacing-brand-s) py-(--spacing-brand-xs)"><span>{{ message }}</span><button hlmBtn variant="outline" size="sm" type="button" (click)="retry()">{{ 'factory.retry' | transloco }}</button></div>}
+  @else if (loadingMore()) {<p role="status" class="text-sm text-brand-gray-600">{{ 'board.loadingMore' | transloco }}</p>}
+  @if (loading()) {<factory-loading [text]="'board.loading' | transloco" />}
+  @else if (error(); as err) {<div class="flex flex-col gap-(--spacing-brand-xs)"><factory-error [message]="err" /><div><button hlmBtn variant="outline" size="sm" (click)="retry()">{{ 'factory.retry' | transloco }}</button></div></div>}
+  @else {
+    <div role="region" tabindex="0" [attr.aria-label]="'factory.requirements' | transloco" class="flex gap-(--spacing-brand-s) overflow-x-auto pb-(--spacing-brand-s)" cdkDropListGroup>
+      @for (column of columns(); track column.id) {
+        <section data-board-column class="flex w-80 shrink-0 flex-col gap-(--spacing-brand-s) rounded-brand-lg border border-brand-gray-200 bg-brand-surface-muted/60 p-(--spacing-brand-s)">
+           <header class="flex items-center justify-between px-(--spacing-brand-xxs)"><div class="flex items-center gap-(--spacing-brand-xs)"><span class="factory-icon-tile factory-icon-tile-sm"><factory-icon [name]="columnIcon[column.id]" size="sm" /></span><div><strong class="block text-sm text-brand-gray-900">{{ colLabelKey(column.id) | transloco }}</strong><span class="text-meta text-brand-gray-600">{{ colHintKey(column.id) | transloco }}</span></div></div><span class="factory-badge factory-badge-neutral">{{ column.cards.length }}</span></header>
+          <div cdkDropList [id]="column.id" [cdkDropListData]="column.cards" [cdkDropListSortingDisabled]="true" (cdkDropListDropped)="onDrop($event)" class="flex min-h-24 flex-col gap-(--spacing-brand-xs)">
+            @for (card of column.cards; track card.id) {
+              <article cdkDrag [cdkDragDisabled]="!auth.canMoveRequirements()" (pointerdown)="onCardPointerDown()" (cdkDragStarted)="onDragStarted()" class="factory-card factory-card-interactive group gap-(--spacing-brand-xxs) p-(--spacing-brand-s)" [class.cursor-grab]="auth.canMoveRequirements()" [class.active:cursor-grabbing]="auth.canMoveRequirements()">
+                <button type="button" class="block w-full text-left" (click)="openCard(card)">
+                   <div class="min-w-0"><span class="text-micro text-brand-gray-600">#{{ card.number }}</span><p class="font-medium leading-snug text-brand-gray-900">{{ card.title }}</p>@if (card.description && card.description !== card.title) {<p class="mt-(--spacing-brand-xxs) line-clamp-2 text-meta leading-snug text-brand-gray-600">{{ card.description }}</p>}</div>
+                  @if (cardStatus(card); as status) {<span class="factory-badge mt-(--spacing-brand-xs) w-fit" [class.factory-badge-success]="status.tone === 'success'" [class.factory-badge-warning]="status.tone === 'warning'" [class.factory-badge-danger]="status.tone === 'danger'" [class.factory-badge-info]="status.tone === 'info'" [class.factory-badge-neutral]="status.tone === 'neutral'" [class.factory-badge-brand]="status.tone === 'brand'"><factory-icon [name]="status.icon" [class.animate-spin]="status.pulse" size="xs" /> {{ status.label | transloco }}</span>}
+                </button>
+                  <div class="mt-(--spacing-brand-xs) flex items-center justify-end gap-(--spacing-brand-xs)">
+                     @if (card.assignee) {<span class="text-micro text-brand-gray-600">{{ 'factory.assignedTo' | transloco: { name: card.assignee } }}</span><factory-avatar [name]="card.assignee" size="sm" />}
+                  </div>
+              </article>
+            } @empty {<p class="rounded-brand-md border border-dashed border-brand-gray-300 p-(--spacing-brand-s) text-center text-meta text-brand-gray-600">{{ 'factory.noRequirements' | transloco }}</p>}
+          </div>
+        </section>
+      }
+    </div>
+  }
+</section>
+
+@defer (when selectedCard()) {
+  @if (selectedCard(); as card) {<factory-card-detail [card]="card" [applications]="activeSystem() ? [activeSystem()!] : []" [canManageRequirements]="auth.canManageRequirements()" [canMoveRequirements]="auth.canMoveRequirements()" [canInterview]="auth.canInterviewRequirements()" [canImplement]="auth.canImplement()" [canReview]="auth.canReviewImplementation()" [saving]="savingDetail()" [error]="detailError()" (save)="onDetailSave($event)" (saveSpecification)="onSpecificationSave($event)" (requirementsChanged)="refreshRequirements()" (deliveryChanged)="refreshRequirements()" (advance)="onDetailAdvance($event)" (moveBackward)="moveCard(card, $event)" (remove)="onDetailRemove()" (dismiss)="closeDetail()" />}
+}
+@if (creatingIn(); as column) {@if (activeSystem(); as system) {<factory-card-create [context]="{ team: system.team, application: system.id }" [column]="column" [applications]="[system]" [busy]="creating()" [error]="createError()" (create)="onCreate($event)" (dismiss)="closeCreate()" />}}

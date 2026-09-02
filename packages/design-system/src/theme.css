@@ -1,0 +1,91 @@
+/* AUTO-GENERATED from src/tokens.ts by scripts/generate.ts — DO NOT EDIT BY HAND.
+ * Edit the tokens in src/tokens.ts, then run `bun run generate`.
+ * Tailwind v4 @theme token definitions.
+ * The drift test (__tests__/tokens.test.ts) fails if this file is stale.
+ */
+@import "./tokens.css";
+
+@theme {
+  /* Brand mint; yellow is a compatibility alias */
+  --color-brand-mint-50: var(--brand-mint-50);
+  --color-brand-mint-100: var(--brand-mint-100);
+  --color-brand-mint-200: var(--brand-mint-200);
+  --color-brand-mint-300: var(--brand-mint-300);
+  --color-brand-mint-400: var(--brand-mint-400);
+  --color-brand-mint-500: var(--brand-mint-500);
+  --color-brand-mint-600: var(--brand-mint-600);
+  --color-brand-mint-700: var(--brand-mint-700);
+  --color-brand-mint-800: var(--brand-mint-800);
+  --color-brand-mint-900: var(--brand-mint-900);
+  --color-brand-mint: var(--brand-mint-500);
+  --color-brand-yellow-50: var(--brand-yellow-50);
+  --color-brand-yellow-100: var(--brand-yellow-100);
+  --color-brand-yellow-200: var(--brand-yellow-200);
+  --color-brand-yellow-300: var(--brand-yellow-300);
+  --color-brand-yellow-400: var(--brand-yellow-400);
+  --color-brand-yellow-500: var(--brand-yellow-500);
+  --color-brand-yellow-600: var(--brand-yellow-600);
+  --color-brand-yellow-700: var(--brand-yellow-700);
+  --color-brand-yellow-800: var(--brand-yellow-800);
+  --color-brand-yellow-900: var(--brand-yellow-900);
+  --color-brand-yellow: var(--brand-yellow-500);
+  --color-brand-ink: var(--brand-light-spartan-primary-foreground);
+
+  /* Neutrals */
+  --color-brand-gray-50: var(--brand-light-gray-50);
+  --color-brand-gray-100: var(--brand-light-gray-100);
+  --color-brand-gray-200: var(--brand-light-gray-200);
+  --color-brand-gray-300: var(--brand-light-gray-300);
+  --color-brand-gray-400: var(--brand-light-gray-400);
+  --color-brand-gray-500: var(--brand-light-gray-500);
+  --color-brand-gray-600: var(--brand-light-gray-600);
+  --color-brand-gray-700: var(--brand-light-gray-700);
+  --color-brand-gray-800: var(--brand-light-gray-800);
+  --color-brand-gray-900: var(--brand-light-gray-900);
+
+  /* Surfaces */
+  --color-brand-surface: var(--brand-light-surface);
+  --color-brand-surface-muted: var(--brand-light-surface-muted);
+  --color-brand-surface-sunken: var(--brand-light-surface-sunken);
+
+  /* Semantic */
+  --color-brand-success: var(--brand-light-success);
+  --color-brand-warning: var(--brand-light-warning);
+  --color-brand-warning-strong: var(--brand-light-warning-strong);
+  --color-brand-caution: var(--brand-light-caution);
+  --color-brand-danger: var(--brand-light-danger);
+  --color-brand-danger-dark: var(--brand-light-danger-dark);
+  --color-brand-info: var(--brand-light-info);
+
+  /* Fonts — font-sans resolves to the configured brand sans */
+  --font-sans: var(--brand-font-sans);
+  --font-slab: var(--brand-font-slab);
+  --font-mono: var(--brand-font-mono);
+
+  /* Radii — rounded-brand-md, … */
+  --radius-brand-sm: var(--brand-radius-sm);
+  --radius-brand-md: var(--brand-radius-md);
+  --radius-brand-lg: var(--brand-radius-lg);
+  --radius-brand-xl: var(--brand-radius-xl);
+  --radius-brand-2xl: var(--brand-radius-2xl);
+  --radius-brand-input: var(--brand-radius-input);
+
+  /* Shadows — shadow-brand-card, … */
+  --shadow-brand-xs: var(--brand-light-shadow-xs);
+  --shadow-brand-card: var(--brand-light-shadow-card);
+  --shadow-brand-md: var(--brand-light-shadow-md);
+  --shadow-brand-lift: var(--brand-light-shadow-lift);
+  --shadow-brand-header: var(--brand-light-shadow-header);
+  --shadow-brand-dropdown: var(--brand-light-shadow-dropdown);
+
+  /* Spacing */
+  --spacing-brand-xxxs: var(--brand-spacing-xxxs);
+  --spacing-brand-xxs: var(--brand-spacing-xxs);
+  --spacing-brand-xs: var(--brand-spacing-xs);
+  --spacing-brand-s: var(--brand-spacing-s);
+  --spacing-brand-m: var(--brand-spacing-m);
+  --spacing-brand-l: var(--brand-spacing-l);
+  --spacing-brand-xl: var(--brand-spacing-xl);
+  --spacing-brand-xxl: var(--brand-spacing-xxl);
+  --spacing-brand-xxxl: var(--brand-spacing-xxxl);
+}

@@ -1,0 +1,70 @@
+<!--
+Unless explicitly acquired and licensed from Licensor under another license, the contents of this file are subject to the Reciprocal Public License ("RPL") Version 1.5, or subsequent versions as allowed by the RPL, and You may not copy or use this file in either source code or executable form, except in compliance with the terms and conditions of the RPL.
+
+All software distributed under the RPL is provided strictly on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED, AND LICENSOR HEREBY DISCLAIMS ALL SUCH WARRANTIES, INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT, OR NON-INFRINGEMENT. See the RPL for specific language governing rights and limitations under the RPL.
+-->
+
+<div class="min-h-screen">
+  @if (!publicAuthRoute() && auth.isAuthenticated()) {
+    <header class="sticky top-0 z-30 border-b border-brand-gray-200 bg-brand-surface/88 backdrop-blur-xl">
+      <div class="mx-auto flex h-16 w-full max-w-[96rem] items-center gap-(--spacing-brand-s) px-(--spacing-brand-s) sm:px-(--spacing-brand-l)">
+        <a data-brand-link [routerLink]="['/']" [queryParams]="brandQueryParams()" class="factory-wordmark shrink-0 text-brand-gray-900 no-underline"><span class="hidden lg:inline">Agentic Software Factory</span><span class="lg:hidden">ASF</span></a>
+        <span class="h-5 w-px bg-brand-gray-200"></span>
+        <nav class="flex min-w-0 flex-1 items-center gap-(--spacing-brand-xs)" [attr.aria-label]="'factory.contextNavigation' | transloco">
+          <factory-team-switcher class="block min-w-0 max-w-20 shrink sm:max-w-48" />
+          <factory-system-switcher class="block min-w-0 flex-1" (createRequested)="onboardingOpen.set(true)" />
+        </nav>
+        @if (auth.user(); as user) {
+          <div class="relative shrink-0">
+            <button type="button" data-testid="account-menu" hlmBtn variant="ghost" size="icon" class="rounded-full p-0 ring-offset-brand-surface hover:ring-2 hover:ring-brand-gray-300 focus-visible:ring-2 focus-visible:ring-ring" [attr.aria-label]="'factory.openAccount' | transloco" [cdkMenuTriggerFor]="accountMenu" [cdkMenuPosition]="accountMenuPositions">
+              <factory-avatar [initials]="user.initials" [name]="user.displayName" size="lg" />
+            </button>
+            <ng-template #accountMenu>
+              <div id="account-dropdown" data-testid="account-dropdown" cdkMenu class="account-dropdown w-72 overflow-hidden rounded-xl border border-brand-gray-200 bg-brand-surface shadow-xl">
+                <div class="border-b border-brand-gray-200 px-(--spacing-brand-m) py-(--spacing-brand-s)">
+                  <strong class="block truncate text-sm text-brand-gray-900">{{ user.displayName }}</strong>
+                  <span class="block truncate text-xs text-brand-gray-600">{{ user.email }}</span>
+                </div>
+                <div class="p-(--spacing-brand-xs)">
+                  <button type="button" cdkMenuItem class="account-menu-item" (cdkMenuItemTriggered)="openMonitoring()"><factory-icon name="gauge" /> {{ 'monitoring.open' | transloco }}</button>
+                  <button type="button" cdkMenuItem class="account-menu-item" (cdkMenuItemTriggered)="theme.toggle()"><factory-icon [name]="theme.isDark() ? 'sun' : 'moon'" /> {{ (theme.isDark() ? 'factory.lightMode' : 'factory.darkMode') | transloco }}</button>
+                  <button type="button" cdkMenuItem class="account-menu-item" (cdkMenuItemTriggered)="locale.toggle()"><factory-icon name="languages" /> {{ (locale.active() === 'de' ? 'locale.en' : 'locale.de') | transloco }}</button>
+                </div>
+                <div class="border-t border-brand-gray-200 p-(--spacing-brand-xs)">
+                  <button type="button" cdkMenuItem class="account-menu-item text-brand-danger" (cdkMenuItemTriggered)="auth.signOut()"><factory-icon name="log-out" /> {{ 'factory.signOut' | transloco }}</button>
+                </div>
+              </div>
+            </ng-template>
+          </div>
+        }
+      </div>
+    </header>
+  }
+  <main>
+    @if (publicAuthRoute()) {
+      <router-outlet />
+    } @else if (auth.state() === 'loading') {
+      <p role="status" class="flex min-h-screen items-center justify-center text-sm text-brand-gray-600">{{ 'common.loading' | transloco }}</p>
+    } @else if (auth.state() === 'unavailable') {
+      <section data-testid="auth-unavailable" class="mx-auto flex min-h-[calc(100vh-4rem)] max-w-lg flex-col items-center justify-center px-(--spacing-brand-l) text-center">
+        <h1 class="text-xl font-semibold text-brand-gray-900">{{ 'auth.unavailableTitle' | transloco }}</h1>
+        <p class="mt-(--spacing-brand-s) text-sm text-brand-gray-600">{{ 'auth.unavailableText' | transloco }}</p>
+        <button type="button" hlmBtn class="mt-(--spacing-brand-l)" (click)="retryAuth()">{{ 'factory.retry' | transloco }}</button>
+      </section>
+    } @else {
+      <router-outlet />
+    }
+  </main>
+</div>
+
+@defer (when monitoringOpen()) {
+  @if (monitoringOpen()) {
+    <factory-monitoring-drawer [open]="true" (closed)="monitoringOpen.set(false)" />
+  }
+}
+
+@defer (when onboardingOpen()) {
+  @if (onboardingOpen() && team.activeTeam(); as activeTeam) {
+    <factory-onboarding-modal [team]="activeTeam" (changed)="onboardingChanged()" (dismiss)="onboardingOpen.set(false)" />
+  }
+}

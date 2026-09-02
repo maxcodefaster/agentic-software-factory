@@ -1,0 +1,52 @@
+<!--
+Unless explicitly acquired and licensed from Licensor under another license, the contents of this file are subject to the Reciprocal Public License ("RPL") Version 1.5, or subsequent versions as allowed by the RPL, and You may not copy or use this file in either source code or executable form, except in compliance with the terms and conditions of the RPL.
+
+All software distributed under the RPL is provided strictly on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED, AND LICENSOR HEREBY DISCLAIMS ALL SUCH WARRANTIES, INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT, OR NON-INFRINGEMENT. See the RPL for specific language governing rights and limitations under the RPL.
+-->
+
+<div class="flex flex-col gap-(--spacing-brand-xs)">
+  <!-- The path: Backlog ─ Anforderungen ─ Umsetzung ─ Erledigt. Traveled segments
+       are inked, the road ahead is faint, the next gate wears a lock. -->
+  <ol class="grid grid-cols-4 items-start gap-(--spacing-brand-xxs) sm:flex sm:items-center sm:gap-0">
+    @for (s of stages; track s.id; let i = $index; let last = $last) {
+      <li
+        class="flex min-w-0 flex-col items-center gap-(--spacing-brand-xxs) text-center sm:shrink-0 sm:flex-row sm:gap-(--spacing-brand-xs) sm:text-left"
+        [attr.aria-current]="stateOf(i) === 'active' ? 'step' : null"
+      >
+        <span
+          class="grid size-5 shrink-0 place-items-center rounded-full text-xs font-semibold transition-colors"
+          [class]="markerClass(i)"
+        >
+          @if (stateOf(i) === 'done') {
+            <factory-icon name="check" size="xs" />
+          } @else if (stateOf(i) === 'active') {
+            <span class="size-1.5 rounded-full bg-brand-ink"></span>
+          } @else if (isLocked(i)) {
+            <factory-icon name="lock" size="xs" />
+          } @else {
+            {{ i + 1 }}
+          }
+        </span>
+        <span class="text-micro leading-tight transition-colors min-[460px]:text-xs sm:whitespace-nowrap sm:text-sm" [class]="labelClass(i)">
+          {{ s.label | transloco }}
+        </span>
+      </li>
+      @if (!last) {
+        <li
+          aria-hidden="true"
+          class="mx-(--spacing-brand-xs) hidden h-px w-5 rounded-full transition-colors sm:mx-(--spacing-brand-s) sm:block sm:w-auto sm:flex-1"
+          [class]="connectorClass(i)"
+        ></li>
+      }
+    }
+  </ol>
+
+  @if (!compact()) {<p class="line-clamp-2 text-meta leading-snug text-brand-gray-600 sm:line-clamp-none">
+    {{ activeBlurb() | transloco }}
+    @if (!nextUnlocked() && nextHint(); as hint) {
+      <span class="inline-flex items-center gap-(--spacing-brand-xxs) text-brand-gray-600">
+        · <factory-icon name="lock" size="xs" /> {{ hint }}
+      </span>
+    }
+  </p>}
+</div>

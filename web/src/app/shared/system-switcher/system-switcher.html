@@ -1,0 +1,11 @@
+<!--
+Unless explicitly acquired and licensed from Licensor under another license, the contents of this file are subject to the Reciprocal Public License ("RPL") Version 1.5, or subsequent versions as allowed by the RPL, and You may not copy or use this file in either source code or executable form, except in compliance with the terms and conditions of the RPL.
+
+All software distributed under the RPL is provided strictly on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED, AND LICENSOR HEREBY DISCLAIMS ALL SUCH WARRANTIES, INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT, OR NON-INFRINGEMENT. See the RPL for specific language governing rights and limitations under the RPL.
+-->
+
+@if (showSelector()) {
+  <factory-context-listbox class="block max-w-56" [ariaLabel]="'applications.selectSystem' | transloco" [triggerText]="systems.activeSystem()?.name || ('factory.systems' | transloco)" triggerIcon="box" [options]="options()" [value]="systems.activeSystem()?.id || null" [emptyText]="'applications.empty' | transloco" [actionLabel]="auth.canManageApplications() ? ('applications.onboarding.create' | transloco) : null" (valueChange)="pick($event)" (action)="createRequested.emit()" />
+} @else {
+  <span class="flex min-w-0 items-center gap-(--spacing-brand-xs) truncate text-sm font-medium text-brand-gray-900"><factory-icon name="box" size="sm" />{{ systems.activeSystem()?.name || ('factory.systems' | transloco) }}</span>
+}

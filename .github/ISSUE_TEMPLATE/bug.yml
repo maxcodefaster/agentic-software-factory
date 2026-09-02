@@ -1,0 +1,69 @@
+# Unless explicitly acquired and licensed from Licensor under another license, the contents of this file are subject to the Reciprocal Public License ("RPL") Version 1.5, or subsequent versions as allowed by the RPL, and You may not copy or use this file in either source code or executable form, except in compliance with the terms and conditions of the RPL.
+#
+# All software distributed under the RPL is provided strictly on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED, AND LICENSOR HEREBY DISCLAIMS ALL SUCH WARRANTIES, INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT, OR NON-INFRINGEMENT. See the RPL for specific language governing rights and limitations under the RPL.
+
+name: Bug report
+description: Report a reproducible defect in a supported release.
+title: "[Bug]: "
+labels: [bug, triage]
+body:
+  - type: markdown
+    attributes:
+      value: Do not report security vulnerabilities here. Use private vulnerability reporting.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Release tag, image digest, or commit SHA.
+      placeholder: v0.1.0
+    validations:
+      required: true
+  - type: dropdown
+    id: environment_kind
+    attributes:
+      label: Affected environment
+      options:
+        - Local OrbStack stack
+        - Coder developer workspace
+        - Coder verification workspace
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, architecture, Bun/Node/Docker/Kubernetes, browser/editor, and relevant dependency versions.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Minimal ordered steps with secrets and personal data removed.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior and logs
+      description: Include relevant sanitized output.
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched existing issues and current documentation.
+          required: true
+        - label: I removed credentials, cookies, personal data, and proprietary source.
+          required: true
+        - label: This is not a security vulnerability.
+          required: true

@@ -1,0 +1,23 @@
+Agentic Software Factory Example
+Copyright 2026 Agentic Software Factory contributors
+
+Licensed under the Reciprocal Public License 1.5 (RPL-1.5). The complete
+license text is in LICENSE. The source and its change history
+are available at:
+
+https://github.com/maxcodefaster/agentic-software-factory/tree/main/example
+
+This distribution is part of Agentic Software Factory and includes changes by
+the contributors recorded in Git history. Source files that cannot contain
+comments without breaking their parser or generated artifacts use this NOTICE
+as the location for the RPL Exhibit A notice.
+
+No Exhibit B user-visible attribution text is specified by RPL-1.5.
+
+Third-party dependencies retain their own licenses and copyright notices. See
+package manifests and installed dependency metadata for those terms. No known
+third-party patent claims requiring disclosure have been identified.
+
+Unless explicitly acquired and licensed from Licensor under another license, the contents of this file are subject to the Reciprocal Public License ("RPL") Version 1.5, or subsequent versions as allowed by the RPL, and You may not copy or use this file in either source code or executable form, except in compliance with the terms and conditions of the RPL.
+
+All software distributed under the RPL is provided strictly on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED, AND LICENSOR HEREBY DISCLAIMS ALL SUCH WARRANTIES, INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT, OR NON-INFRINGEMENT. See the RPL for specific language governing rights and limitations under the RPL.

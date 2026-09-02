@@ -1,0 +1,644 @@
+/*
+ * Unless explicitly acquired and licensed from Licensor under another license, the contents of this file are subject to the Reciprocal Public License ("RPL") Version 1.5, or subsequent versions as allowed by the RPL, and You may not copy or use this file in either source code or executable form, except in compliance with the terms and conditions of the RPL.
+ *
+ * All software distributed under the RPL is provided strictly on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED, AND LICENSOR HEREBY DISCLAIMS ALL SUCH WARRANTIES, INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT, OR NON-INFRINGEMENT. See the RPL for specific language governing rights and limitations under the RPL.
+ */
+
+@layer theme, base, components, utilities;
+@import "@angular/cdk/overlay-prebuilt.css";
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/preflight.css" layer(base);
+@import "tailwindcss/utilities.css";
+@source "./app";
+
+@import "@spartan-ng/brain/hlm-tailwind-preset.css";
+
+/* Shared primitives and light/dark semantic contracts are generated from
+ * @agentic-software-factory/design-system/src/tokens.ts. */
+@import "@agentic-software-factory/design-system/theme.css";
+
+/**
+ * Agentic Software Factory global styles.
+ *
+ * Brand fonts are theme-configurable at runtime (admin console → Branding). The
+ * neutral default relies on the token font stacks (Inter / system fonts, no
+ * external loading). A deployment may add its own @font-face and preload tags;
+ * the rest of the design system is unchanged.
+ */
+
+/* ── Tailwind v4 theme — app-specific additions ────────────────────────── */
+
+@theme {
+  /* Type scale — a small set of *semantic* steps so surfaces stop living at a
+flat 11–14px. Named (not numbered) so intent is legible at the call site:
+`text-display` (the one big thing on a surface), `text-title` (section
+headings), `text-meta` (quiet secondary line). Body stays Tailwind `text-sm`;
+the 11px uppercase eyebrow stays `.factory-section-label`. New names, so nothing
+in the existing `text-xs/sm/lg/xl` usage is touched. */
+  --text-display: 1.5rem;
+  --text-display--line-height: 1.85rem;
+  --text-display--letter-spacing: -0.012em;
+  --text-title: 1.0625rem;
+  --text-title--line-height: 1.4rem;
+  --text-title--letter-spacing: -0.006em;
+  --text-meta: 0.8125rem;
+  --text-meta--line-height: 1.15rem;
+  /* The legitimate 11px micro step (timestamps, dense table meta, eyebrow-ish
+     captions) — a named token so surfaces stop reaching for `text-[11px]`. */
+  --text-micro: 0.6875rem;
+  --text-micro--line-height: 0.95rem;
+}
+
+/* ── Global resets in line with brand typographic baseline ───────────────── */
+
+html,
+body {
+  height: 100%;
+}
+
+.factory-body {
+  margin: 0;
+  font-family: var(--font-sans);
+  color: var(--color-brand-gray-900);
+  /* Cool page backdrop with a mint glow. */
+  background:
+    radial-gradient(60rem 40rem at 0% -10%, rgb(85 255 211 / 0.09), transparent 60%),
+    radial-gradient(50rem 40rem at 100% 0%, rgb(72 232 255 / 0.08), transparent 55%),
+    var(--color-brand-surface-muted);
+  background-attachment: fixed;
+  font-feature-settings: "kern", "liga", "ss01";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  line-height: 1.5;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-sans);
+  font-weight: 520;
+  color: var(--color-brand-gray-900);
+  letter-spacing: -0.025em;
+  line-height: 1.2;
+}
+
+a {
+  color: color-mix(in srgb, var(--color-brand-info) 58%, var(--color-brand-gray-900));
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+a:hover {
+  text-decoration-thickness: 2px;
+}
+
+:focus-visible {
+  /* Dark, high-contrast ring that remains visible on the mint primary button. */
+  outline: 2px solid var(--color-brand-gray-900);
+  outline-offset: 2px;
+  border-radius: var(--radius-brand-sm);
+}
+
+/* ── Reusable utility classes (sparingly — prefer Tailwind utilities) ── */
+
+.factory-card {
+  background: var(--color-brand-surface);
+  border: 1px solid var(--color-brand-gray-200);
+  border-radius: var(--radius-brand-lg);
+  padding: var(--spacing-brand-m);
+  box-shadow: var(--shadow-brand-card);
+  position: relative;
+  isolation: isolate;
+}
+
+.factory-overlay-panel {
+  position: relative;
+  isolation: isolate;
+  border: 1px solid var(--color-brand-gray-200);
+  border-radius: var(--radius-brand-lg);
+  background: var(--color-brand-surface);
+  box-shadow: var(--shadow-brand-card);
+}
+.factory-overlay-focus,
+.factory-overlay-drawer { padding: 0; }
+@media (max-width: 639px) {
+  .factory-overlay-focus,
+  .factory-overlay-drawer { border-radius: 0; }
+}
+
+.factory-card-glow {
+  background:
+    radial-gradient(circle at 85% 5%, rgb(72 232 255 / 0.1), transparent 35%),
+    linear-gradient(145deg, color-mix(in srgb, var(--color-brand-surface) 96%, var(--color-brand-info)), var(--color-brand-surface));
+}
+
+.factory-card-glow::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  z-index: -1;
+  border-radius: inherit;
+  background: radial-gradient(circle at 82% 12%, rgb(85 255 211 / 0.2), transparent 34%);
+  filter: blur(18px);
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+/* Interactive cards lift slightly and pick up a mint edge on hover. */
+.factory-card-interactive {
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.18s ease;
+  cursor: pointer;
+}
+.factory-card-interactive:hover {
+  border-color: color-mix(in srgb, var(--color-brand-mint-500) 65%, var(--color-brand-gray-200));
+  box-shadow: var(--shadow-brand-md), 0 0 28px rgb(85 255 211 / 0.12);
+  transform: translateY(-2px);
+}
+.factory-card-interactive:focus-visible {
+  border-color: var(--color-brand-mint-500);
+  box-shadow: var(--shadow-brand-md), 0 0 0 1px var(--color-brand-mint-500), 0 0 28px rgb(85 255 211 / 0.14);
+}
+
+.factory-hover-row {
+  transition: background-color 0.18s ease, box-shadow 0.18s ease, color 0.18s ease;
+}
+.factory-hover-row:hover,
+.factory-hover-row:focus-visible {
+  background: color-mix(in srgb, var(--color-brand-mint-500) 7%, var(--color-brand-surface));
+  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--color-brand-mint-500) 75%, transparent);
+}
+
+/* Tiny uppercase eyebrow used above section headings. */
+.factory-section-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-brand-gray-600);
+}
+
+.factory-context-trigger {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--spacing-brand-xxs);
+  border-bottom: 1px solid var(--color-brand-gray-400);
+  padding: 0.25rem 0;
+  color: var(--color-brand-gray-900);
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+.factory-context-trigger:hover { border-color: var(--color-brand-gray-900); }
+.factory-context-menu {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  z-index: 50;
+  min-width: 15rem;
+  overflow: hidden;
+  border: 1px solid var(--color-brand-gray-200);
+  border-radius: var(--radius-brand-md);
+  background: var(--color-brand-surface);
+  padding: var(--spacing-brand-xxs);
+  box-shadow: var(--shadow-brand-md);
+}
+.factory-context-menu button {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: var(--spacing-brand-xs);
+  border-radius: var(--radius-brand-sm);
+  padding: var(--spacing-brand-xs);
+  text-align: left;
+  font-size: 0.875rem;
+}
+.factory-context-menu button:hover { background: var(--color-brand-gray-100); }
+
+/* Square mint tile holding a Lucide icon. */
+.factory-icon-tile {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 2.25rem;
+  width: 2.25rem;
+  border-radius: var(--radius-brand-md);
+  background: var(--color-brand-mint-500);
+  color: var(--color-brand-ink);
+  box-shadow: var(--shadow-brand-xs);
+  flex-shrink: 0;
+}
+.factory-icon-tile-sm {
+  height: 1.75rem;
+  width: 1.75rem;
+  border-radius: var(--radius-brand-sm);
+}
+
+/* Soft semantic badges — tinted fill + saturated text, shadcn-style. */
+.factory-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-brand-xxs);
+  border-radius: 999px;
+  padding: 0.125rem 0.625rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+.factory-badge-neutral {
+  background: var(--color-brand-gray-100);
+  color: var(--color-brand-gray-600);
+}
+.factory-badge-success {
+  background: color-mix(in srgb, var(--color-brand-success) 14%, var(--color-brand-surface));
+  color: color-mix(in srgb, var(--color-brand-success) 68%, var(--color-brand-gray-900));
+}
+.factory-badge-warning {
+  background: color-mix(in srgb, var(--color-brand-caution) 16%, var(--color-brand-surface));
+  color: var(--color-brand-warning-strong);
+}
+.factory-badge-danger {
+  background: color-mix(in srgb, var(--color-brand-danger) 14%, var(--color-brand-surface));
+  color: var(--color-brand-danger-dark);
+}
+.factory-badge-info {
+  background: color-mix(in srgb, var(--color-brand-info) 12%, var(--color-brand-surface));
+  color: color-mix(in srgb, var(--color-brand-info) 52%, var(--color-brand-gray-900));
+}
+.factory-badge-brand {
+  background: var(--color-brand-mint-500);
+  color: var(--color-brand-ink);
+}
+
+/* ── brand form field ──────────────────────────────────────────────────────
+ * The single field look (text input, textarea, hand-rolled controls). Matches
+ * the brand input-field spec: 4dp radius, status-driven outline (1px 42%-black
+ * resting → dark 2px-feel on focus → danger on invalid → muted disabled). Used
+ * directly on <textarea>/<input> and applied by the `hlmInput` primitive, so
+ * every field reads the same instead of re-deriving the shadcn look. */
+.factory-input {
+  width: 100%;
+  border-radius: var(--radius-brand-input);
+  border: 1px solid color-mix(in srgb, var(--color-brand-gray-900) 40%, transparent);
+  background: var(--color-brand-surface);
+  color: var(--color-brand-gray-900);
+  font-size: 0.875rem;
+  line-height: 1.4;
+  padding: 0.5rem 0.625rem;
+  outline: none;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.factory-input::placeholder {
+  color: var(--color-brand-gray-400);
+}
+.factory-input:focus-visible,
+.factory-input:focus-within {
+  outline: none;
+  border-color: var(--color-brand-gray-900);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-brand-gray-900) 14%, transparent);
+}
+.factory-input[data-matches-spartan-invalid="true"],
+.factory-input[aria-invalid="true"],
+.factory-input.is-invalid {
+  border-color: var(--color-brand-danger);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-brand-danger) 20%, transparent);
+}
+.factory-input:disabled {
+  border-color: color-mix(in srgb, var(--color-brand-gray-900) 20%, transparent);
+  background: var(--color-brand-surface-muted);
+  color: var(--color-brand-gray-400);
+  cursor: not-allowed;
+}
+
+/* ── Code / config block ──────────────────────────────────────────────────
+ * A dark "terminal" surface for snippets (.mcp.json, configs). Constant in both
+ * themes — a dark code block stays dark in dark mode rather than inverting to a
+ * light card. */
+.factory-code {
+  background: var(--color-brand-ink);
+  color: #e3e7ee;
+}
+
+/* ── brand selectable row / option ─────────────────────────────────────────
+ * One look for "pick this" rows + option chips (interview answers, target
+ * systems, PR refine options). Toggle `.is-selected`. */
+.factory-selectable {
+  border: 1px solid var(--color-brand-gray-200);
+  border-radius: var(--radius-brand-md);
+  background: var(--color-brand-surface);
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.factory-selectable:hover {
+  border-color: var(--color-brand-gray-300);
+  background: var(--color-brand-surface-muted);
+}
+.factory-selectable.is-selected {
+  border-color: var(--color-brand-mint-500);
+  background: color-mix(in srgb, var(--color-brand-mint-500) 12%, var(--color-brand-surface));
+  box-shadow: inset 0 0 0 1px var(--color-brand-mint-500);
+}
+
+/* ── PR result actions — preview · PR · CI ────────────────────────────────
+ * The action row of a built PR. A small, precise system: ONE hero affordance
+ * (the live preview, dark ink on mint) flanked by quiet hairline ghost links,
+ * with a crisp 150ms hover + a 0.5px press. Hierarchy by weight, not colour.
+ * Used by card-pr. */
+.factory-action {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-brand-xxs);
+  border-radius: var(--radius-brand-md);
+  padding: 0.3125rem 0.625rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.15;
+  white-space: nowrap;
+  border: 1px solid transparent;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.1s ease;
+}
+.factory-action:active {
+  transform: translateY(0.5px);
+}
+/* HERO — the live preview. The brand's primary affordance: dark ink on mint. */
+.factory-action-primary {
+  background: var(--color-brand-mint-500);
+  color: var(--color-brand-ink);
+  box-shadow: var(--shadow-brand-xs);
+}
+.factory-action-primary:hover {
+  background: color-mix(in srgb, var(--color-brand-mint-500) 90%, black);
+  box-shadow: var(--shadow-brand-md);
+}
+/* GHOST — secondary links (PR, CI). Hairline, quiet until hover. */
+.factory-action-ghost {
+  color: var(--color-brand-gray-600);
+  background: var(--color-brand-surface);
+  border-color: color-mix(in srgb, var(--color-brand-gray-900) 12%, transparent);
+}
+.factory-action-ghost:hover {
+  color: var(--color-brand-gray-900);
+  background: var(--color-brand-surface-muted);
+  border-color: color-mix(in srgb, var(--color-brand-gray-900) 22%, transparent);
+}
+
+/* ── Deep-links — "Direkt zur Änderung" (the exact changed page) ───────────
+ * A precise list under the preview: an info-toned route the reviewer/demo can
+ * click to land on the feature subpage, not the homepage. Hover underline. */
+.factory-deeplink {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-brand-xxs);
+  min-width: 0;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--color-brand-info);
+}
+.factory-deeplink:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.factory-deeplink-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Subtle entrance for routed content + streamed items.
+   NB: the `to` frame deliberately omits `transform` so that, with
+   `fill-mode: both`, the settled element has `transform: none` — otherwise a
+   retained `translateY(0)` turns every animated container into a containing
+   block for `position: fixed` children (modals would be clipped to it). */
+@keyframes factory-fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+  }
+}
+.factory-animate-in {
+  animation: factory-fade-in-up 0.35s ease both;
+}
+
+/* Scroll-entrance reveal (driven by the factoryReveal directive). The element
+   starts dimmed + nudged down and settles when it enters the viewport.
+   Reduced-motion users get the end state immediately. */
+.factory-reveal {
+  opacity: 0;
+  transform: translateY(14px);
+  transition:
+    opacity 0.5s ease,
+    transform 0.5s ease;
+  will-change: opacity, transform;
+}
+.factory-reveal.is-revealed {
+  opacity: 1;
+  transform: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .factory-animate-in {
+    animation: none;
+  }
+  .factory-reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  .factory-card-interactive,
+  .factory-action,
+  .animate-pulse,
+  .animate-spin {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+  }
+}
+
+/* Bottom-sheet entrance for the card-detail journey surface. Slides up from the
+   viewport edge and settles. As with `factory-fade-in-up`, the `to` frame omits
+   `transform` so the settled sheet is not a containing block for fixed children
+   (popovers/menus rendered inside must escape to the viewport). */
+@keyframes factory-sheet-in {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+  }
+}
+.factory-sheet-in {
+  animation: factory-sheet-in 0.3s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .factory-sheet-in {
+    animation: none;
+  }
+}
+
+/* Right-drawer entrance for the card-detail journey surface — the board stays
+   visible on the left while the ticket opens full-height on the right. As with
+   the sheet, the `to` frame omits `transform` so the settled drawer is not a
+   containing block for fixed children (popovers must escape to the viewport). */
+@keyframes factory-drawer-in {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+  to {
+    opacity: 1;
+  }
+}
+.factory-drawer-in {
+  animation: factory-drawer-in 0.32s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .factory-drawer-in {
+    animation: none;
+  }
+}
+
+/* Focus-surface entrance for the card-detail journey "stage" — a near-fullscreen
+   sheet that rises and settles with a barely-there scale, so the board behind
+   (softly blurred by the scrim) reads as the context it came from. As with the
+   other entrances, the `to` frame omits `transform` so the settled panel is not
+   a containing block for its `position: fixed` children. */
+@keyframes factory-focus-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+  }
+}
+.factory-focus-in {
+  animation: factory-focus-in 0.36s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .factory-focus-in {
+    animation: none;
+  }
+}
+
+:root {
+  color-scheme: light;
+
+  --factory-scrim: var(--brand-light-scrim);
+  --radius: var(--brand-radius-md);
+  --background: var(--brand-light-spartan-background);
+  --foreground: var(--brand-light-spartan-foreground);
+  --card: var(--brand-light-spartan-card);
+  --card-foreground: var(--brand-light-spartan-card-foreground);
+  --popover: var(--brand-light-spartan-popover);
+  --popover-foreground: var(--brand-light-spartan-popover-foreground);
+  --primary: var(--brand-light-spartan-primary);
+  --primary-foreground: var(--brand-light-spartan-primary-foreground);
+  --secondary: var(--brand-light-spartan-secondary);
+  --secondary-foreground: var(--brand-light-spartan-secondary-foreground);
+  --muted: var(--brand-light-spartan-muted);
+  --muted-foreground: var(--brand-light-spartan-muted-foreground);
+  --accent: var(--brand-light-spartan-accent);
+  --accent-foreground: var(--brand-light-spartan-accent-foreground);
+  --destructive: var(--brand-light-spartan-destructive);
+  --border: var(--brand-light-spartan-border);
+  --input: var(--brand-light-spartan-input);
+  --ring: var(--brand-light-spartan-ring);
+  --sidebar: var(--brand-light-spartan-sidebar);
+  --sidebar-foreground: var(--brand-light-spartan-sidebar-foreground);
+  --sidebar-primary: var(--brand-light-spartan-sidebar-primary);
+  --sidebar-primary-foreground: var(--brand-light-spartan-sidebar-primary-foreground);
+  --sidebar-accent: var(--brand-light-spartan-sidebar-accent);
+  --sidebar-accent-foreground: var(--brand-light-spartan-sidebar-accent-foreground);
+  --sidebar-border: var(--brand-light-spartan-sidebar-border);
+  --sidebar-ring: var(--brand-light-spartan-sidebar-ring);
+}
+
+:root.dark {
+  color-scheme: dark;
+
+  --color-brand-gray-50: var(--brand-dark-gray-50);
+  --color-brand-gray-100: var(--brand-dark-gray-100);
+  --color-brand-gray-200: var(--brand-dark-gray-200);
+  --color-brand-gray-300: var(--brand-dark-gray-300);
+  --color-brand-gray-400: var(--brand-dark-gray-400);
+  --color-brand-gray-500: var(--brand-dark-gray-500);
+  --color-brand-gray-600: var(--brand-dark-gray-600);
+  --color-brand-gray-700: var(--brand-dark-gray-700);
+  --color-brand-gray-800: var(--brand-dark-gray-800);
+  --color-brand-gray-900: var(--brand-dark-gray-900);
+  --color-brand-surface: var(--brand-dark-surface);
+  --color-brand-surface-muted: var(--brand-dark-surface-muted);
+  --color-brand-surface-sunken: var(--brand-dark-surface-sunken);
+  --color-brand-success: var(--brand-dark-success);
+  --color-brand-warning: var(--brand-dark-warning);
+  --color-brand-warning-strong: var(--brand-dark-warning-strong);
+  --color-brand-caution: var(--brand-dark-caution);
+  --color-brand-danger: var(--brand-dark-danger);
+  --color-brand-danger-dark: var(--brand-dark-danger-dark);
+  --color-brand-info: var(--brand-dark-info);
+  --factory-scrim: var(--brand-dark-scrim);
+  --shadow-brand-xs: var(--brand-dark-shadow-xs);
+  --shadow-brand-card: var(--brand-dark-shadow-card);
+  --shadow-brand-md: var(--brand-dark-shadow-md);
+  --shadow-brand-lift: var(--brand-dark-shadow-lift);
+  --shadow-brand-dropdown: var(--brand-dark-shadow-dropdown);
+  --background: var(--brand-dark-spartan-background);
+  --foreground: var(--brand-dark-spartan-foreground);
+  --card: var(--brand-dark-spartan-card);
+  --card-foreground: var(--brand-dark-spartan-card-foreground);
+  --popover: var(--brand-dark-spartan-popover);
+  --popover-foreground: var(--brand-dark-spartan-popover-foreground);
+  --primary: var(--brand-dark-spartan-primary);
+  --primary-foreground: var(--brand-dark-spartan-primary-foreground);
+  --secondary: var(--brand-dark-spartan-secondary);
+  --secondary-foreground: var(--brand-dark-spartan-secondary-foreground);
+  --muted: var(--brand-dark-spartan-muted);
+  --muted-foreground: var(--brand-dark-spartan-muted-foreground);
+  --accent: var(--brand-dark-spartan-accent);
+  --accent-foreground: var(--brand-dark-spartan-accent-foreground);
+  --destructive: var(--brand-dark-spartan-destructive);
+  --border: var(--brand-dark-spartan-border);
+  --input: var(--brand-dark-spartan-input);
+  --ring: var(--brand-dark-spartan-ring);
+  --sidebar: var(--brand-dark-spartan-sidebar);
+  --sidebar-foreground: var(--brand-dark-spartan-sidebar-foreground);
+  --sidebar-primary: var(--brand-dark-spartan-sidebar-primary);
+  --sidebar-primary-foreground: var(--brand-dark-spartan-sidebar-primary-foreground);
+  --sidebar-accent: var(--brand-dark-spartan-sidebar-accent);
+  --sidebar-accent-foreground: var(--brand-dark-spartan-sidebar-accent-foreground);
+  --sidebar-border: var(--brand-dark-spartan-sidebar-border);
+  --sidebar-ring: var(--brand-dark-spartan-sidebar-ring);
+}
+
+:root:not(.dark) .factory-card-glow::after {
+  opacity: 0.24;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}

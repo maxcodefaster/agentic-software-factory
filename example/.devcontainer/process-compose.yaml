@@ -1,0 +1,62 @@
+# Unless explicitly acquired and licensed from Licensor under another license, the contents of this file are subject to the Reciprocal Public License ("RPL") Version 1.5, or subsequent versions as allowed by the RPL, and You may not copy or use this file in either source code or executable form, except in compliance with the terms and conditions of the RPL.
+#
+# All software distributed under the RPL is provided strictly on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED, AND LICENSOR HEREBY DISCLAIMS ALL SUCH WARRANTIES, INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT, OR NON-INFRINGEMENT. See the RPL for specific language governing rights and limitations under the RPL.
+
+version: "0.5"
+name: agentic-software-factory-example
+ordered_shutdown: true
+log_level: info
+log_length: 2000
+log_location: ${PROCESS_COMPOSE_LOG_DIRECTORY}/services.log
+log_configuration:
+  rotation:
+    directory: ${PROCESS_COMPOSE_LOG_DIRECTORY}
+    filename: process-compose.log
+    max_size_mb: 10
+    max_backups: 3
+processes:
+  postgres:
+    command: docker-entrypoint.sh postgres
+    description: PostgreSQL 17 development database
+    environment:
+      - POSTGRES_USER=factory_app
+      - POSTGRES_PASSWORD=factory_app
+      - POSTGRES_DB=factory_app
+    readiness_probe:
+      exec:
+        command: pg_isready -h 127.0.0.1 -U factory_app -d factory_app
+      initial_delay_seconds: 1
+      period_seconds: 1
+      timeout_seconds: 2
+      failure_threshold: 60
+    shutdown:
+      command: pg_ctl --pgdata="$PGDATA" stop --mode=fast --wait
+      timeout_seconds: 15
+  migrate:
+    command: sh .devcontainer/migrate.sh
+    description: Apply committed Drizzle migrations
+    depends_on:
+      postgres:
+        condition: process_healthy
+    availability:
+      restart: exit_on_failure
+  application:
+    command: exec bun --no-env-file ${VITE_ENTRY:-node_modules/vite/bin/vite.js} --config ${VITE_CONFIG:-vite.config.ts} --configLoader native --host 0.0.0.0 --port 4173
+    description: Vite development server with hot module replacement
+    depends_on:
+      migrate:
+        condition: process_completed_successfully
+    readiness_probe:
+      http_get:
+        host: 127.0.0.1
+        port: "4173"
+        path: /api/health/ready
+        scheme: http
+        status_code: 200
+      initial_delay_seconds: 1
+      period_seconds: 1
+      timeout_seconds: 2
+      failure_threshold: 60
+    shutdown:
+      signal: 15
+      timeout_seconds: 10

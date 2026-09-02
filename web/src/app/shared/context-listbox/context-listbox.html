@@ -1,0 +1,28 @@
+<!--
+Unless explicitly acquired and licensed from Licensor under another license, the contents of this file are subject to the Reciprocal Public License ("RPL") Version 1.5, or subsequent versions as allowed by the RPL, and You may not copy or use this file in either source code or executable form, except in compliance with the terms and conditions of the RPL.
+
+All software distributed under the RPL is provided strictly on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED, AND LICENSOR HEREBY DISCLAIMS ALL SUCH WARRANTIES, INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT, OR NON-INFRINGEMENT. See the RPL for specific language governing rights and limitations under the RPL.
+-->
+
+<div class="relative min-w-0 max-w-full" (focusout)="onFocusOut($event)">
+  <button #trigger type="button" class="factory-context-trigger w-full" [attr.aria-label]="ariaLabel()" [attr.aria-expanded]="open()" [attr.aria-controls]="open() ? listboxId : null" aria-haspopup="listbox" (click)="toggle()" (keydown)="onTriggerKeydown($event)">
+    @if (triggerIcon(); as icon) {<factory-icon [name]="icon" size="sm" class="shrink-0" />}
+    <span class="min-w-0 truncate">{{ triggerText() }}</span>
+    <factory-icon name="chevron-down" size="sm" class="shrink-0" [class.rotate-180]="open()" />
+  </button>
+  @if (open()) {
+    <div data-outside-click tabindex="-1" aria-hidden="true" class="fixed inset-0 z-40 cursor-default" (click)="close()"></div>
+    <div class="factory-context-menu" [class.left-0]="align() === 'start'" [class.right-0]="align() === 'end'" (keydown.escape)="onEscape($event)" (keydown.tab)="onTab()">
+      <ul cdkListbox [id]="listboxId" [cdkListboxValue]="selectedValues()" [attr.aria-label]="ariaLabel()" (cdkListboxValueChange)="select($event)">
+        @for (option of options(); track option.value) {
+          <li><button type="button" [cdkOption]="option.value" (click)="closeAfterOptionClick()"><span class="min-w-0 flex-1"><strong class="block truncate font-medium">{{ option.label }}</strong>@if (option.description) {<span class="block truncate text-meta text-brand-gray-500">{{ option.description }}</span>}</span>@if (option.value === value()) {<factory-icon name="check" size="sm" />}</button></li>
+        } @empty {
+          <li class="px-(--spacing-brand-xs) py-(--spacing-brand-xs) text-sm text-brand-gray-500">{{ emptyText() }}</li>
+        }
+      </ul>
+      @if (actionLabel(); as label) {
+        <div class="mt-(--spacing-brand-xs) border-t border-brand-gray-200 pt-(--spacing-brand-xs)"><button data-context-action type="button" class="font-medium" (click)="runAction()"><factory-icon name="plus" size="sm" /> {{ label }}</button></div>
+      }
+    </div>
+  }
+</div>

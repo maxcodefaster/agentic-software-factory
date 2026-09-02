@@ -1,0 +1,35 @@
+<!doctype html>
+<!--
+Unless explicitly acquired and licensed from Licensor under another license, the contents of this file are subject to the Reciprocal Public License ("RPL") Version 1.5, or subsequent versions as allowed by the RPL, and You may not copy or use this file in either source code or executable form, except in compliance with the terms and conditions of the RPL.
+
+All software distributed under the RPL is provided strictly on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED, AND LICENSOR HEREBY DISCLAIMS ALL SUCH WARRANTIES, INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT, OR NON-INFRINGEMENT. See the RPL for specific language governing rights and limitations under the RPL.
+-->
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Agentic Software Factory</title>
+    <base href="/" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="description" content="Requirements, implementation, review, and delivery evidence." />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#090c14" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f3f8f9" />
+    <!-- Apply persisted theme and runtime branding before the app starts. -->
+    <script src="/bootstrap.js"></script>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="alternate icon" href="/favicon.ico" type="image/x-icon" />
+    <!--
+      Brand fonts + favicon are theme-configurable at runtime (admin console → Branding).
+      The neutral default uses the token font stacks (Inter / system fonts, no external
+      loading). A deployment may add its own @font-face and preload tags.
+    -->
+    <!-- Runtime brand-override slot: deployments replace public/branding.css. -->
+  </head>
+  <body class="factory-body">
+    <factory-root></factory-root>
+    <noscript>
+      This application requires JavaScript.
+    </noscript>
+  </body>
+</html>

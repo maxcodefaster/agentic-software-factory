@@ -1,0 +1,251 @@
+<!--
+Unless explicitly acquired and licensed from Licensor under another license, the contents of this file are subject to the Reciprocal Public License ("RPL") Version 1.5, or subsequent versions as allowed by the RPL, and You may not copy or use this file in either source code or executable form, except in compliance with the terms and conditions of the RPL.
+
+All software distributed under the RPL is provided strictly on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED, AND LICENSOR HEREBY DISCLAIMS ALL SUCH WARRANTIES, INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT, OR NON-INFRINGEMENT. See the RPL for specific language governing rights and limitations under the RPL.
+-->
+
+<div class="flex min-h-0 flex-1 flex-col gap-(--spacing-brand-m)">
+  @if (!loading()) {<div class="flex items-center gap-(--spacing-brand-xxs) text-meta text-brand-gray-600"><span class="size-1.5 rounded-full" [class.bg-brand-success]="agentAvailable()" [class.bg-brand-warning]="!agentAvailable()"></span>{{ (agentAvailable() ? 'card.interviewReady' : 'card.interviewUnavailable') | transloco }}@if (!agentAvailable() && agentReason()) { · {{ agentReason() }}}</div>}
+  @if (!canMutate()) {<p class="rounded-brand-md border border-brand-gray-200 bg-brand-surface-muted p-(--spacing-brand-s) text-sm text-brand-gray-600"><factory-icon name="lock" size="xs" /> {{ 'authorization.businessRequired' | transloco }}</p>}
+  @if (loading()) {
+    <p class="flex items-center gap-(--spacing-brand-xxs) text-meta text-brand-gray-600">
+      <span class="relative grid size-8 place-items-center"><span class="absolute size-8 animate-ping rounded-full bg-brand-mint-500/20"></span><factory-icon name="sparkles" size="sm" class="relative text-brand-gray-900" /></span><span><strong class="block text-sm text-brand-gray-800">{{ 'card.interviewLoading' | transloco }}</strong><span class="block text-micro text-brand-gray-600">{{ 'card.systemContextSource' | transloco }}</span></span>
+    </p>
+  } @else {
+    <!-- The trail of answered turns — a calm record (left-accented), never the focus. -->
+    @if (answered().length) {
+      <details class="border-l-2 border-brand-gray-200 pl-(--spacing-brand-s)">
+        <summary class="cursor-pointer text-meta font-medium text-brand-gray-600">{{ 'card.answerCount' | transloco: { count: answered().length } }}</summary>
+      <ul class="mt-(--spacing-brand-xs) flex flex-col gap-(--spacing-brand-xs)">
+        @for (t of answered(); track t.question.id) {
+          <li class="flex items-start gap-(--spacing-brand-xs) text-meta leading-snug">
+            <factory-icon name="check" size="xs" class="mt-0.5 shrink-0 text-brand-success" />
+            <span class="text-brand-gray-500">
+              {{ t.question.header || t.question.prompt }}
+              <span class="font-medium text-brand-gray-800"> · {{ summary(t) }}</span>
+            </span>
+          </li>
+        }
+      </ul>
+      </details>
+    }
+
+    @if (isFresh()) {
+      @if (busy()) {
+        <!-- Coder Chat and Factory are preparing the first clarification step. -->
+        <p class="flex items-center gap-(--spacing-brand-xs) text-meta text-brand-gray-600">
+          <factory-icon name="loader" size="sm" class="animate-spin" /> {{ 'card.contextPreparing' | transloco }}
+        </p>
+      } @else if (canMutate()) {
+        <!-- Fallback (auto-start unavailable): start it manually. -->
+        <div class="flex flex-col gap-(--spacing-brand-s)">
+          <p class="text-sm leading-relaxed text-brand-gray-600">
+            {{ 'card.interviewIntro' | transloco }}
+          </p>
+          <div>
+            <button hlmBtn size="sm" (click)="start()">
+              <factory-icon name="sparkles" size="sm" /> {{ 'card.interviewStart' | transloco }}
+            </button>
+          </div>
+        </div>
+      }
+    } @else if (pendingOperation()) {
+      <div role="status" class="flex flex-col gap-(--spacing-brand-s) rounded-brand-lg border border-brand-mint-500/40 bg-brand-mint-500/5 p-(--spacing-brand-m)">
+        @if (pending(); as q) {
+          <div class="flex flex-col gap-(--spacing-brand-xxs)">
+            <span class="factory-section-label">{{ 'card.question' | transloco: { n: stepNumber() } }}@if (q.header) { · {{ q.header }}}</span>
+            <strong class="text-base font-semibold text-balance text-brand-gray-900">{{ q.prompt }}</strong>
+            <span class="text-sm text-brand-gray-700"><span class="font-medium">{{ 'card.submittedAnswer' | transloco }}</span> {{ pendingOperation()!.payload }}</span>
+          </div>
+        }
+        <p class="flex items-center gap-(--spacing-brand-xs) text-sm font-medium text-brand-gray-900">
+          <factory-icon [name]="pendingFailure() ? 'triangle-alert' : 'loader'" size="sm" [class.animate-spin]="!pendingFailure()" /> {{ pendingStatusKey() | transloco }}
+        </p>
+        @if (canMutate() && pendingFailure()?.retryable) {
+          <button hlmBtn size="sm" class="w-fit" [disabled]="busy()" (click)="retryPending()">
+            {{ 'card.retryResponse' | transloco }}
+          </button>
+        }
+      </div>
+    } @else if (pending(); as q) {
+      <!-- The one focused question — elevated as a card so it's clearly the task. -->
+      <div
+        class="flex flex-col gap-(--spacing-brand-s) rounded-brand-lg border border-brand-gray-200 bg-brand-surface p-(--spacing-brand-m) shadow-brand-card"
+        (keydown)="onKey($event)"
+      >
+        <div class="flex flex-col gap-(--spacing-brand-xxs)">
+          <div class="flex items-center justify-between gap-(--spacing-brand-xs)">
+            <span class="factory-section-label">
+              {{ 'card.question' | transloco: { n: stepNumber() } }}@if (q.header) { · {{ q.header }}}
+            </span>
+            @if (q.type === 'multi') {
+              <span class="text-meta text-brand-gray-600">{{ 'card.multiSelect' | transloco }}</span>
+            }
+          </div>
+          <strong class="text-base font-semibold text-balance text-brand-gray-900">{{ q.prompt }}</strong>
+          @if (q.hint) {
+            <span class="text-meta leading-snug text-brand-gray-600">{{ q.hint }}</span>
+          }
+        </div>
+
+        @if (q.type === 'text') {
+          <textarea
+            hlmInput
+            id="interview-answer"
+            name="answer"
+            rows="4"
+            class="w-full resize-y text-sm"
+            autocomplete="off"
+            [placeholder]="'card.answerPh' | transloco"
+            [value]="customText()"
+            [disabled]="busy() || !canMutate()"
+            (input)="customText.set($any($event.target).value)"
+          ></textarea>
+        } @else {
+          <!-- single / multi choice -->
+          <div class="flex flex-col gap-(--spacing-brand-xs)">
+            @for (o of q.options; track o.value; let i = $index) {
+              <button
+                type="button"
+                [attr.role]="q.type === 'single' ? 'radio' : 'checkbox'"
+                [attr.aria-checked]="isSelected(o.value)"
+                [disabled]="busy() || !canMutate()"
+                (click)="q.type === 'multi' ? toggle(o.value) : pick(o.value)"
+                class="factory-selectable flex items-start gap-(--spacing-brand-s) rounded-brand-lg px-(--spacing-brand-s) py-(--spacing-brand-xs) text-left"
+                [class.is-selected]="isSelected(o.value)"
+              >
+                <span
+                  class="mt-px flex size-5 shrink-0 items-center justify-center border text-xs font-semibold"
+                  [class.rounded-full]="q.type === 'single'"
+                  [class.rounded-brand-sm]="q.type === 'multi'"
+                  [class.border-brand-mint]="isSelected(o.value)"
+                  [class.bg-brand-mint]="isSelected(o.value)"
+                  [class.text-brand-gray-900]="isSelected(o.value)"
+                  [class.border-brand-gray-300]="!isSelected(o.value)"
+                  [class.text-brand-gray-500]="!isSelected(o.value)"
+                >
+                  @if (isSelected(o.value)) {
+                    <factory-icon name="check" size="xs" />
+                  } @else if (i < 9) {
+                    {{ i + 1 }}
+                  }
+                </span>
+                <span class="flex min-w-0 flex-col gap-px">
+                  <span
+                    class="text-sm leading-snug"
+                    [class.font-medium]="isSelected(o.value)"
+                    [class.text-brand-gray-900]="isSelected(o.value)"
+                    [class.text-brand-gray-700]="!isSelected(o.value)"
+                    >{{ o.label }}</span
+                  >
+                  @if (o.description) {
+                    <span class="text-meta leading-snug text-brand-gray-600">{{ o.description }}</span>
+                  }
+                </span>
+              </button>
+            }
+          </div>
+
+          @if (q.allowCustom) {
+            <!-- opencode-style: the options are the structured answer; a free-text
+                 "eigene Antwort" is always available below for when none fit. -->
+            <label class="flex flex-col gap-(--spacing-brand-xxs) border-t border-brand-gray-100 pt-(--spacing-brand-s)">
+              <span class="text-meta text-brand-gray-600">{{ 'card.ownAnswer' | transloco }}</span>
+              <input
+                hlmInput
+                id="interview-custom-answer"
+                name="customAnswer"
+                class="w-full text-sm"
+                autocomplete="off"
+                [placeholder]="'card.ownAnswerPh' | transloco"
+                [value]="customText()"
+                [disabled]="busy() || !canMutate()"
+                (input)="customText.set($any($event.target).value)"
+                (keydown.enter)="submit()"
+              />
+            </label>
+          }
+        }
+
+        <div class="flex items-center justify-between gap-(--spacing-brand-xs)">
+          <span class="hidden text-meta text-brand-gray-600 sm:inline">
+            @if (q.type !== 'text') { {{ 'card.chooseHint' | transloco: { n: q.options.length } }} · }{{ 'card.enterHint' | transloco }}
+          </span>
+          @if (canMutate()) {<button hlmBtn size="sm" class="ml-auto" [disabled]="!canSubmit()" (click)="submit()">
+            @if (busy()) {
+              <factory-icon name="loader" size="sm" class="animate-spin" />
+            } @else {
+              <factory-icon name="arrow-right" size="sm" />
+            }
+            {{ 'card.next' | transloco }}
+          </button>}
+        </div>
+      </div>
+    } @else if (done()) {
+      <!-- Anforderung geklärt — calm success; sharpen or restart from here. -->
+      <div class="flex flex-col gap-(--spacing-brand-s)">
+        <span class="factory-badge factory-badge-success w-fit">
+          <factory-icon name="circle-check" size="xs" /> {{ 'board.status.reqClarified' | transloco }}
+        </span>
+
+        <p class="text-meta leading-snug text-brand-gray-600">
+          {{ 'card.clarifiedDesc' | transloco }}
+        </p>
+
+        @if (canMutate() && sharpenOpen()) {
+          <div
+            class="flex flex-col gap-(--spacing-brand-s) rounded-brand-md border border-brand-mint-500/40 bg-brand-mint-500/5 p-(--spacing-brand-s)"
+          >
+            <span class="factory-section-label">{{ 'card.sharpenLabel' | transloco }}</span>
+            <textarea
+              id="interview-sharpen"
+              name="sharpen"
+              autocomplete="off"
+              rows="3"
+              [placeholder]="'card.sharpenPh' | transloco"
+              class="factory-input w-full resize-none"
+              [value]="sharpenNote()"
+              (input)="sharpenNote.set($any($event.target).value)"
+            ></textarea>
+            <div class="flex items-center justify-end gap-(--spacing-brand-xs)">
+              <button hlmBtn variant="ghost" size="sm" [disabled]="busy()" (click)="cancelSharpen()">
+                {{ 'common.cancel' | transloco }}
+              </button>
+              <button
+                hlmBtn
+                size="sm"
+                [disabled]="busy() || !sharpenNote().trim()"
+                (click)="submitSharpen()"
+              >
+                @if (busy()) {
+                  <factory-icon name="loader" size="sm" class="animate-spin" />
+                } @else {
+                  <factory-icon name="sparkles" size="sm" />
+                }
+                {{ 'card.sharpen' | transloco }}
+              </button>
+            </div>
+          </div>
+        } @else if (canMutate()) {
+          <div class="flex items-center gap-(--spacing-brand-xs)">
+            <button hlmBtn variant="outline" size="sm" [disabled]="busy()" (click)="openSharpen()">
+              <factory-icon name="sparkles" size="sm" /> {{ 'card.sharpenAdd' | transloco }}
+            </button>
+            <button hlmBtn variant="ghost" size="sm" [disabled]="busy()" (click)="retake()">
+              <factory-icon name="refresh-cw" size="sm" /> {{ 'card.restart' | transloco }}
+            </button>
+            @if (retakes() > 0) {
+              <span class="text-meta text-brand-gray-600">{{ 'card.repeated' | transloco: { n: retakes() } }}</span>
+            }
+          </div>
+        }
+      </div>
+    }
+  }
+
+  @if (error(); as err) {
+    <p role="alert" class="flex items-center gap-(--spacing-brand-xxs) text-meta text-brand-danger">
+      <factory-icon name="triangle-alert" size="xs" /> {{ err }}
+    </p>
+  }
+</div>

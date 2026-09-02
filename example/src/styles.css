@@ -1,0 +1,154 @@
+/*
+Unless explicitly acquired and licensed from Licensor under another license, the contents of this file are subject to the Reciprocal Public License ("RPL") Version 1.5, or subsequent versions as allowed by the RPL, and You may not copy or use this file in either source code or executable form, except in compliance with the terms and conditions of the RPL.
+
+All software distributed under the RPL is provided strictly on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED, AND LICENSOR HEREBY DISCLAIMS ALL SUCH WARRANTIES, INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT, OR NON-INFRINGEMENT. See the RPL for specific language governing rights and limitations under the RPL.
+*/
+@import "tailwindcss";
+
+:root {
+  font-family:
+    "Avenir Next", Avenir, "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  color: #102027;
+  background: #f5f8f8;
+}
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+input,
+textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.6rem;
+  background: #fff;
+  padding: 0.7rem 0.85rem;
+  color: #0f172a;
+  outline: none;
+}
+
+input:focus,
+textarea:focus,
+select:focus-visible,
+button:focus-visible {
+  outline: 3px solid rgb(245 158 11 / 28%);
+  outline-offset: 2px;
+  border-color: #d97706;
+}
+
+.eyebrow {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #92400e;
+}
+
+.field-label {
+  display: block;
+  margin-bottom: 0.4rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #475569;
+}
+
+.primary-button,
+.secondary-button,
+.auth-mode-button,
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  border-radius: 0.6rem;
+  font-size: 0.875rem;
+  font-weight: 700;
+  transition:
+    background 150ms ease,
+    color 150ms ease,
+    border-color 150ms ease;
+}
+
+.primary-button {
+  border: 1px solid #0f172a;
+  background: #0f172a;
+  padding: 0.7rem 1rem;
+  color: white;
+}
+
+.primary-button:hover {
+  background: #1e293b;
+}
+
+.secondary-button {
+  border: 1px solid #cbd5e1;
+  background: white;
+  padding: 0.7rem 1rem;
+  color: #334155;
+}
+
+.secondary-button:hover,
+.auth-mode-button:hover,
+.icon-button:hover {
+  background: #f1f5f9;
+}
+
+.auth-mode-button {
+  border: 0;
+  background: transparent;
+  padding: 0.5rem;
+  color: #475569;
+  font-weight: 600;
+}
+
+.icon-button {
+  width: 2.35rem;
+  height: 2.35rem;
+  border: 1px solid #cbd5e1;
+  background: transparent;
+  color: #475569;
+}
+
+.icon-button.danger:hover {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.status-select {
+  width: 7rem;
+  flex: none;
+  appearance: none;
+  border: 0;
+  border-radius: 999px;
+  padding: 0.45rem 0.8rem;
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.status-todo {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.status-doing {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.status-done {
+  background: #dcfce7;
+  color: #166534;
+}

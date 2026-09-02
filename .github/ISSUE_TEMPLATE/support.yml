@@ -1,0 +1,41 @@
+# Unless explicitly acquired and licensed from Licensor under another license, the contents of this file are subject to the Reciprocal Public License ("RPL") Version 1.5, or subsequent versions as allowed by the RPL, and You may not copy or use this file in either source code or executable form, except in compliance with the terms and conditions of the RPL.
+#
+# All software distributed under the RPL is provided strictly on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED, AND LICENSOR HEREBY DISCLAIMS ALL SUCH WARRANTIES, INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT, OR NON-INFRINGEMENT. See the RPL for specific language governing rights and limitations under the RPL.
+
+name: Support question
+description: Ask a sanitized setup or compatibility question.
+title: "[Support]: "
+labels: [question, triage]
+body:
+  - type: markdown
+    attributes:
+      value: Support is best effort, with no guaranteed response time, uptime commitment, production support, or private consulting. Search existing issues first. Operators remain responsible for production capacity, upgrades, backups, incidents, and dependencies. Do not include secrets or vulnerability details; report suspected vulnerabilities privately under SECURITY.md.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      placeholder: v0.1.0
+    validations:
+      required: true
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal and blocker
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment and attempted steps
+      description: Include the operating system, runtime versions, deployment mode, and sanitized logs or a minimal reproduction.
+    validations:
+      required: true
+  - type: checkboxes
+    id: safe
+    attributes:
+      label: Data safety
+      options:
+        - label: I removed credentials, cookies, personal data, and proprietary source.
+          required: true
+        - label: This is not a security vulnerability.
+          required: true

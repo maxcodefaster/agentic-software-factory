@@ -1,0 +1,50 @@
+{
+  "name": "Agentic Software Factory Example Verification",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": "../..",
+    "target": "verification"
+  },
+  "remoteUser": "vscode",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/project,type=bind,readonly",
+  "workspaceFolder": "/workspaces/project",
+  "containerEnv": {
+    "PGDATA": "${localEnv:FACTORY_STATE_DIR:/home/vscode/.local/share/devcontainer-verification}/postgres",
+    "DATABASE_URL": "postgres://factory_app:factory_app@127.0.0.1:5432/factory_app",
+    "BETTER_AUTH_SECRET": "verification-fixture-secret-is-not-an-account-credential",
+    "BETTER_AUTH_URL": "http://127.0.0.1:4173",
+    "BETTER_AUTH_ENABLE_SIGN_UP": "false",
+    "FACTORY_VERIFICATION_MODE": "fixture",
+    "PROCESS_COMPOSE_CONFIG": "/opt/factory-verification/project/.devcontainer/process-compose.yaml",
+    "PROCESS_COMPOSE_LOG_DIRECTORY": "${localEnv:FACTORY_STATE_DIR:/home/vscode/.local/state/devcontainer-verification}/process-compose",
+    "VITE_ENTRY": "/opt/factory-verification/node_modules/vite/bin/vite.js",
+    "VITE_CONFIG": "/opt/factory-verification/project/vite.config.ts",
+    "VITE_CACHE_DIR": "${localEnv:FACTORY_STATE_DIR:/home/vscode/.local/state/devcontainer-verification}/vite",
+    "HOST": "0.0.0.0",
+    "PORT": "4173"
+  },
+  "postStartCommand": [
+    "sh",
+    "/opt/factory-verification/project/.devcontainer/start-verification.sh"
+  ],
+  "customizations": {
+    "coder": {
+      "autoStart": true,
+      "name": "agentic-software-factory-example-verification",
+      "apps": [
+        {
+          "slug": "application",
+          "displayName": "Agentic Software Factory Example",
+          "url": "http://127.0.0.1:4173",
+          "openIn": "tab",
+          "share": "authenticated",
+          "healthCheck": {
+            "url": "http://127.0.0.1:4173/api/health/ready",
+            "interval": 5,
+            "threshold": 12
+          }
+        }
+      ]
+    }
+  }
+}
