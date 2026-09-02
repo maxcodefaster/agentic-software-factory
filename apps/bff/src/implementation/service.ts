@@ -4,16 +4,23 @@
  * All software distributed under the RPL is provided strictly on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED, AND LICENSOR HEREBY DISCLAIMS ALL SUCH WARRANTIES, INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT, OR NON-INFRINGEMENT. See the RPL for specific language governing rights and limitations under the RPL.
  */
 
-import { implementationRunSchema } from '@agentic-software-factory/api-contracts/implementation';
+import {
+  implementationRunSchema,
+  type ImplementationCheck,
+  type ImplementationPhase,
+  type ImplementationReview,
+  type ImplementationRun,
+} from '@agentic-software-factory/api-contracts/implementation';
+export type { ImplementationRun } from '@agentic-software-factory/api-contracts/implementation';
 import { coderAppUrl, type ApplicationDefinition } from '../applications/catalog';
 import type { ApplicationRegistry } from '../applications/registry';
 import type { WorkspaceStartupMetrics } from '../applications/startup-metrics';
 import { toCard, visibleIssueBody, type CommitStatus, type ForgejoClient, type PullRequest, type PullReview } from '../forgejo/client';
 import type { CoderClient, CoderUserIdentity, CoderWorkspace } from '../integrations/coder';
 import { UpstreamHttpError, isUpstreamStatus } from '../integrations/fetch';
-import { startLeaseHeartbeat } from '../lease-heartbeat';
+import { startLeaseHeartbeat, type LeaseHeartbeat } from '../lease-heartbeat';
 import type { Identity } from '../server/types';
-import { ImplementationStore, type DeliveryRecord, type OperationRecord } from './store';
+import { deliveryBranchName, ImplementationStore, type DeliveryRecord, type OperationRecord } from './store';
 import {
   parseVerificationDescription,
   parsePullMarker,
@@ -28,22 +35,6 @@ import {
 
 const REQUIRED_CHECKS = ['factory/specification', 'factory/verification'] as const;
 const CHAT_OPERATION = 'coder-chat-create';
-
-type ImplementationPhase = 'unplanned' | 'provisioning' | 'agent-running' | 'agent-failed' | 'implementing' | 'checks-failing' | 'awaiting-review' | 'changes-requested' | 'ready-to-merge' | 'merging' | 'done';
-interface ImplementationCheck { context: string; state: 'pending' | 'success' | 'failure' | 'error' | 'warning'; description: string; targetUrl: string | null }
-interface ImplementationReview { id: number; state: 'approved' | 'changes-requested' | 'commented'; body: string; reviewer: string; commitSha: string; submittedAt: string }
-interface ImplementationApp { slug: string; displayName: string; url: string; health: 'healthy' | 'initializing' | 'unhealthy' | 'disabled' }
-
-export interface ImplementationRun {
-  id: string; requirementNumber: number; applicationId: string; applicationName: string; acceptedDigest: string;
-  repository: string; repositoryUrl: string; branch: string; pullNumber: number; pullUrl: string; headSha: string;
-  mergedSha: string | null; phase: ImplementationPhase; checks: ImplementationCheck[]; reviews: ImplementationReview[];
-  agentStatus: 'not-started' | 'running' | 'completed' | 'failed'; agentError: string | null; agentStartedHeadSha: string | null;
-  blockers: string[]; nextAction: string; workspaceUrl: string | null; agentUrl: string | null; ideUrl: string | null;
-  workspaceId?: string | null; workspaceStatus?: string | null;
-  developmentApps: ImplementationApp[]; verificationApps: ImplementationApp[];
-  isContributor: boolean; canContinueBranch: boolean; createdAt: string; updatedAt: string; completedAt: string | null;
-}
 
 interface DeliveryContext {
   record: DeliveryRecord;
@@ -73,6 +64,7 @@ export class ImplementationService {
   private readonly onMerged?: (applicationId: string) => Promise<void>;
   private readonly startupMetrics?: WorkspaceStartupMetrics;
   private readonly onOperationReserved?: () => void;
+  private readonly withRequirementWriteLock?: <T>(key: string, action: () => Promise<T>) => Promise<T>;
 
   constructor(
     private readonly store: ImplementationStore,
@@ -92,6 +84,7 @@ export class ImplementationService {
       onMerged?: (applicationId: string) => Promise<void>;
       startupMetrics?: WorkspaceStartupMetrics;
       onOperationReserved?: () => void;
+      withRequirementWriteLock?: <T>(key: string, action: () => Promise<T>) => Promise<T>;
     } = {},
   ) {
     this.leaseMs = options.leaseMs ?? 5 * 60_000;
@@ -103,6 +96,7 @@ export class ImplementationService {
     this.onMerged = options.onMerged;
     this.startupMetrics = options.startupMetrics;
     this.onOperationReserved = options.onOperationReserved;
+    this.withRequirementWriteLock = options.withRequirementWriteLock;
   }
 
   async start(number: number, applicationId: string, identity: Identity, signal?: AbortSignal): Promise<ImplementationRun> {
@@ -136,14 +130,16 @@ export class ImplementationService {
     }
     await this.store.addContributor(id, identity.subject);
     if (!identity.username) throw new Error('Coder delegation requires email and username claims');
-    await this.forgejo.ensureImplementationContributorAccess(
+    const grant = () => this.forgejo.ensureImplementationContributorAccess(
       context.application.repositoryOwner,
       context.application.repositoryName,
       context.branch,
       this.implementationUser,
-      identity.username,
+      identity.username!,
       signal,
     );
+    if (this.store.withActiveContributorGrant) await this.store.withActiveContributorGrant(identity.subject, grant);
+    else await grant();
     const current = await this.store.activeOperation(id, CHAT_OPERATION);
     if (current?.state === 'succeeded' && current.externalId) {
       const agent = await this.agentForOperation(current, context.pull.head.sha, current.factoryUserId === identity.subject ? identity : undefined, signal);
@@ -218,20 +214,22 @@ export class ImplementationService {
     });
     const generation = await this.store.claimVerification(id, this.instanceId);
     if (generation === null) throw conflict('verification environment is already being prepared');
+    const heartbeat = await this.verificationHeartbeat(id, generation);
+    const verificationSignal = signal ? AbortSignal.any([signal, heartbeat.signal]) : heartbeat.signal;
     let claimedHeadSha = '';
     try {
-      let context = await this.loadContext(record, signal);
+      let context = await this.loadContext(record, verificationSignal);
       if (context.pull.state !== 'open' || context.pull.merged) throw conflict('verification environment is unavailable');
-      if (await this.deliveryHasActiveAgent(id, signal)) throw conflict('wait for the active implementation agent before preparing verification');
-      const synchronized = await this.synchronize(context, signal);
+      if (await this.deliveryHasActiveAgent(id, verificationSignal)) throw conflict('wait for the active implementation agent before preparing verification');
+      const synchronized = await this.synchronize(context, verificationSignal);
       context = synchronized.context;
       const synchronizedHeadSha = context.pull.head.sha;
       if (!await this.store.retargetVerification(id, this.instanceId, generation, identity.subject, synchronizedHeadSha, synchronized.defaultSha)) {
         throw new Error('Delivery verification lease was lost');
       }
       claimedHeadSha = synchronizedHeadSha;
-      await this.cleanupStaleVerificationWorkspaces(context, claimedHeadSha, signal);
-      await this.ensureSpecificationCheck(context, claimedHeadSha, signal);
+      await this.cleanupStaleVerificationWorkspaces(context, claimedHeadSha, verificationSignal);
+      await this.ensureSpecificationCheck(context, claimedHeadSha, verificationSignal);
       const createVerificationWorkspace = () => this.coder.ensureVerificationWorkspaceFor(coderIdentity(identity), {
         repositoryUrl: context.application.cloneUrl,
         branch: context.branch,
@@ -239,7 +237,7 @@ export class ImplementationService {
         pullNumber: context.pull.number,
         templateName: this.coderTemplate,
         workspaceNamespace: this.workspaceNamespace,
-      }, signal);
+      }, verificationSignal);
       const workspace = this.startupMetrics
         ? await this.startupMetrics.measure({ systemId: context.application.id, kind: 'verification', sha: claimedHeadSha, contractVersion: 1, cacheKey: `v1:${claimedHeadSha}` }, createVerificationWorkspace)
         : await createVerificationWorkspace();
@@ -253,15 +251,22 @@ export class ImplementationService {
         'factory/verification',
         verificationDescription(marker, healthy ? 'Exact-SHA verification environment is healthy.' : 'Exact-SHA verification environment is starting.'),
         this.coderUrl(workspace.apps[0]?.url ?? workspace.url) ?? '',
-        signal,
+        verificationSignal,
       );
+      heartbeat.throwIfLost();
+      await heartbeat.stop();
+      heartbeat.throwIfLost();
       if (!await this.store.completeVerification(id, this.instanceId, generation, claimedHeadSha, workspace.id)) {
         throw new Error('Delivery verification lease was lost');
       }
       return this.project(context, identity, signal, undefined, workspace);
     } catch (error) {
-      await this.store.retryVerification(id, this.instanceId, generation, claimedHeadSha, error instanceof Error ? error.message : String(error));
-      throw error;
+      await heartbeat.stop();
+      const failure = this.leaseFailure(heartbeat, error);
+      await this.store.retryVerification(id, this.instanceId, generation, claimedHeadSha, failure instanceof Error ? failure.message : String(failure));
+      throw failure;
+    } finally {
+      await heartbeat.stop();
     }
   }
 
@@ -271,18 +276,24 @@ export class ImplementationService {
     if (verification.phase === 'healthy' && observed.pull.head.sha === verification.desiredHeadSha && !observed.pull.merged) return;
     const generation = await this.store.claimVerification(verification.deliveryId, this.instanceId);
     if (generation === null) return;
+    const heartbeat = await this.verificationHeartbeat(verification.deliveryId, generation);
+    const verificationSignal = signal ? AbortSignal.any([signal, heartbeat.signal]) : heartbeat.signal;
     let headSha = verification.desiredHeadSha;
     try {
       let context = observed;
       if (context.pull.state !== 'open' || context.pull.merged) {
+        await heartbeat.stop();
+        heartbeat.throwIfLost();
         await this.store.retryVerification(verification.deliveryId, this.instanceId, generation, headSha, 'Verification environment is no longer active');
         return;
       }
-      if (await this.deliveryHasActiveAgent(verification.deliveryId, signal)) {
+      if (await this.deliveryHasActiveAgent(verification.deliveryId, verificationSignal)) {
+        await heartbeat.stop();
+        heartbeat.throwIfLost();
         await this.store.retryVerification(verification.deliveryId, this.instanceId, generation, headSha, 'Waiting for the active implementation agent');
         return;
       }
-      const synchronized = await this.synchronize(context, signal);
+      const synchronized = await this.synchronize(context, verificationSignal);
       context = synchronized.context;
       headSha = context.pull.head.sha;
       if (headSha !== verification.desiredHeadSha || synchronized.defaultSha !== verification.desiredDefaultSha) {
@@ -290,12 +301,12 @@ export class ImplementationService {
           throw new Error('Delivery verification lease was lost');
         }
       }
-      await this.cleanupStaleVerificationWorkspaces(context, headSha, signal);
-      await this.ensureSpecificationCheck(context, headSha, signal);
+      await this.cleanupStaleVerificationWorkspaces(context, headSha, verificationSignal);
+      await this.ensureSpecificationCheck(context, headSha, verificationSignal);
       const createVerificationWorkspace = () => this.coder.ensureVerificationWorkspaceFor(coderIdentity(identity), {
         repositoryUrl: context.application.cloneUrl, branch: context.branch, headSha, pullNumber: context.pull.number,
         templateName: this.coderTemplate, workspaceNamespace: this.workspaceNamespace,
-      }, signal);
+      }, verificationSignal);
       const workspace = this.startupMetrics
         ? await this.startupMetrics.measure({ systemId: context.application.id, kind: 'verification', sha: headSha, contractVersion: 1, cacheKey: `v1:${headSha}` }, createVerificationWorkspace)
         : await createVerificationWorkspace();
@@ -304,13 +315,25 @@ export class ImplementationService {
       await this.forgejo.createCommitStatus(
         context.application.repositoryOwner, context.application.repositoryName, headSha, healthy ? 'success' : 'pending', 'factory/verification',
         verificationDescription(marker, healthy ? 'Exact-SHA verification environment is healthy.' : 'Exact-SHA verification environment is starting.'),
-        this.coderUrl(workspace.apps[0]?.url ?? workspace.url) ?? '', signal,
+        this.coderUrl(workspace.apps[0]?.url ?? workspace.url) ?? '', verificationSignal,
       );
-      if (healthy) await this.store.completeVerification(verification.deliveryId, this.instanceId, generation, headSha, workspace.id);
-      else await this.store.retryVerification(verification.deliveryId, this.instanceId, generation, headSha, 'Verification environment is still starting');
+      heartbeat.throwIfLost();
+      await heartbeat.stop();
+      heartbeat.throwIfLost();
+      if (healthy) {
+        if (!await this.store.completeVerification(verification.deliveryId, this.instanceId, generation, headSha, workspace.id)) {
+          throw new Error('Delivery verification lease was lost');
+        }
+      } else {
+        await this.store.retryVerification(verification.deliveryId, this.instanceId, generation, headSha, 'Verification environment is still starting');
+      }
     } catch (error) {
-      await this.store.retryVerification(verification.deliveryId, this.instanceId, generation, headSha, error instanceof Error ? error.message : String(error));
-      throw error;
+      await heartbeat.stop();
+      const failure = this.leaseFailure(heartbeat, error);
+      await this.store.retryVerification(verification.deliveryId, this.instanceId, generation, headSha, failure instanceof Error ? failure.message : String(failure));
+      throw failure;
+    } finally {
+      await heartbeat.stop();
     }
   }
 
@@ -362,12 +385,8 @@ export class ImplementationService {
     let context = await this.loadContext(record, signal);
     if (context.pull.merged) {
       const existing = await this.store.completion(record.id);
-      if (!existing) await this.store.reserveCompletion({
-        deliveryId: record.id,
-        reviewedHeadSha: context.pull.head.sha,
-        reviewedDefaultSha: context.pull.base.sha,
-        verificationWorkspaceId: '',
-      });
+      if (!existing) throw conflict('merged pull request has no stored review evidence');
+      await this.assertMergedEvidence(context, existing, signal);
       return this.project(await this.loadContext(await this.store.get(record.id), signal), identity, signal);
     }
     const verification = await this.verificationWorkspace(context, identity, false, signal);
@@ -399,7 +418,7 @@ export class ImplementationService {
     if (completion.phase === 'complete') return;
     const generation = await this.store.claimCompletion(completion.deliveryId, this.instanceId);
     if (generation === null) return;
-    const heartbeat = startLeaseHeartbeat(
+    const heartbeat = await startLeaseHeartbeat(
       () => this.store.renewCompletion(completion.deliveryId, this.instanceId, generation),
       Math.min(this.heartbeatMs, 30_000),
       { lost: 'Delivery completion lease was lost', failed: 'Delivery completion lease heartbeat failed' },
@@ -407,24 +426,38 @@ export class ImplementationService {
     const completionSignal = signal ? AbortSignal.any([signal, heartbeat.signal]) : heartbeat.signal;
     try {
       const record = await this.store.get(completion.deliveryId);
-      const context = await this.loadContext(record, completionSignal);
+      let context = await this.loadContext(record, completionSignal);
       if (!context.pull.merged) {
         await heartbeat.renewNow();
         heartbeat.throwIfLost();
+        const [pull, defaultSha] = await Promise.all([
+          this.forgejo.getPullRequest(context.application.repositoryOwner, context.application.repositoryName, context.pull.number, completionSignal),
+          this.projectForgejo.getProjectBranchHead(context.application.repositoryOwner, context.application.repositoryName, context.application.defaultBranch, completionSignal),
+        ]);
+        if (pull.state !== 'open' || pull.merged || pull.head.sha !== completion.reviewedHeadSha) throw conflict('pull request changed before merge');
+        if (pull.base.sha !== completion.reviewedDefaultSha || defaultSha !== completion.reviewedDefaultSha) throw conflict('default branch advanced before merge');
+        if (pull.head.ref !== context.pull.head.ref || pull.base.ref !== context.pull.base.ref || pull.body !== context.pull.body) {
+          throw conflict('pull request changed before merge');
+        }
+        context = { ...context, pull };
         await this.forgejo.mergePullRequest(context.application.repositoryOwner, context.application.repositoryName, context.pull.number, completion.reviewedHeadSha, completionSignal);
       }
       heartbeat.throwIfLost();
       const merged = context.pull.merged ? context : await this.loadContext(record, completionSignal);
       if (!merged.pull.merged) throw new Error('Forgejo did not report the pull request as merged');
-      if (!await this.store.advanceCompletion(record.id, this.instanceId, generation, 'cleanup-pending', { mergedSha: merged.pull.merged_commit_id ?? merged.pull.base.sha })) throw new Error('Delivery completion lease was lost');
+      const mergedSha = await this.assertMergedEvidence(merged, completion, completionSignal);
+      if (!await this.store.advanceCompletion(record.id, this.instanceId, generation, 'cleanup-pending', { mergedSha })) throw new Error('Delivery completion lease was lost');
       await this.onMerged?.(merged.application.id);
       await this.finish(merged, completionSignal, async () => {
         if (!await this.store.advanceCompletion(record.id, this.instanceId, generation, 'card-transition-pending')) throw new Error('Delivery completion lease was lost');
       });
       heartbeat.throwIfLost();
+      await heartbeat.stop();
+      heartbeat.throwIfLost();
       if (!await this.store.advanceCompletion(record.id, this.instanceId, generation, 'complete')) throw new Error('Delivery completion lease was lost');
       await this.store.touchDelivery(record.id);
     } catch (error) {
+      await heartbeat.stop();
       let failure = error;
       try {
         heartbeat.throwIfLost();
@@ -434,8 +467,58 @@ export class ImplementationService {
       await this.store.retryCompletion(completion.deliveryId, this.instanceId, generation, failure instanceof Error ? failure.message : String(failure));
       throw failure;
     } finally {
-      heartbeat.stop();
+      await heartbeat.stop();
     }
+  }
+
+  private verificationHeartbeat(deliveryId: string, generation: number) {
+    return startLeaseHeartbeat(
+      () => this.store.renewVerification(deliveryId, this.instanceId, generation, new Date(), 15 * 60_000),
+      Math.min(this.heartbeatMs, 30_000),
+      { lost: 'Delivery verification lease was lost', failed: 'Delivery verification lease heartbeat failed' },
+    );
+  }
+
+  private leaseFailure(heartbeat: LeaseHeartbeat, error: unknown): unknown {
+    try {
+      heartbeat.throwIfLost();
+      return error;
+    } catch (leaseError) {
+      return leaseError;
+    }
+  }
+
+  private async assertMergedEvidence(
+    context: DeliveryContext,
+    completion: import('./store').DeliveryCompletionRecord,
+    signal?: AbortSignal,
+  ): Promise<string> {
+    const mergedSha = context.pull.merged_commit_id
+      ?? await this.projectForgejo.getProjectBranchHead(
+        context.application.repositoryOwner,
+        context.application.repositoryName,
+        context.application.defaultBranch,
+        signal,
+      );
+    if (context.pull.head.sha !== completion.reviewedHeadSha
+      || context.pull.head.ref !== context.branch
+      || context.pull.base.ref !== context.application.defaultBranch
+      || (context.pull.merge_base !== undefined && context.pull.merge_base !== null
+        && context.pull.merge_base !== completion.reviewedDefaultSha)) {
+      throw conflict('merged pull request does not match stored review evidence');
+    }
+    if (completion.mergedSha && completion.mergedSha !== mergedSha) {
+      throw conflict('merged pull request does not match stored merge evidence');
+    }
+    const commit = await this.projectForgejo.getProjectCommit(
+      context.application.repositoryOwner, context.application.repositoryName, mergedSha, signal,
+    );
+    if (commit.sha !== mergedSha || commit.parents.length !== 2
+      || commit.parents[0]?.sha !== completion.reviewedDefaultSha
+      || commit.parents[1]?.sha !== completion.reviewedHeadSha) {
+      throw conflict('merged pull request does not match stored merge evidence');
+    }
+    return mergedSha;
   }
 
   async resumeOperation(operation: OperationRecord, identity: Identity, signal?: AbortSignal): Promise<void> {
@@ -469,7 +552,7 @@ export class ImplementationService {
     specification: unknown,
     signal?: AbortSignal,
   ): Promise<DeliveryContext> {
-    const branch = branchName(record);
+    const branch = deliveryBranchName(record);
     const existingPull = await this.projectForgejo.findPullRequestByBranch(application.repositoryOwner, application.repositoryName, branch, signal);
     if (existingPull) return this.context(record, application, branch, existingPull);
     await this.forgejo.ensureProjectRepository(application.repositoryOwner, application.repositoryName, signal);
@@ -536,7 +619,7 @@ export class ImplementationService {
   private async loadContext(record: DeliveryRecord, signal?: AbortSignal): Promise<DeliveryContext> {
     const application = await this.applicationFor(record);
     if (!application) throw Object.assign(new Error('application not found'), { status: 404 });
-    const branch = branchName(record);
+    const branch = deliveryBranchName(record);
     const pull = await this.projectForgejo.findPullRequestByBranch(application.repositoryOwner, application.repositoryName, branch, signal);
     if (!pull) throw conflict('delivery pull request was not found');
     return this.context(record, application, branch, pull);
@@ -720,7 +803,7 @@ export class ImplementationService {
       : check);
     const reviews = rawReviews.map(projectReview);
     const currentDecision = currentReviewDecision(rawReviews, context, verificationBinding, this.reviewActor);
-    const completed = context.pull.merged && (!completion || completion.phase === 'complete');
+    const completed = context.pull.merged && completion?.phase === 'complete';
     const active = await this.deliveryHasActiveAgent(context.record.id, signal, operations);
     const projectedAgent = active && !agent.active ? { ...agent, status: 'running' as const, error: null, active: true } : agent;
     const verificationTargetChanged = verificationState?.phase === 'healthy'
@@ -755,7 +838,7 @@ export class ImplementationService {
       pullNumber: context.pull.number,
       pullUrl: this.forgejoDestination(new URL(context.pull.html_url).pathname),
       headSha: context.pull.head.sha,
-      mergedSha: context.pull.merged ? context.pull.merged_commit_id ?? context.pull.base.sha : null,
+      mergedSha: context.pull.merged ? context.pull.merged_commit_id ?? completion?.mergedSha ?? null : null,
       phase,
       agentStatus: projectedAgent.status,
       agentError: projectedAgent.error,
@@ -949,8 +1032,13 @@ export class ImplementationService {
       );
     }
     await beforeCardTransition?.();
-    await this.forgejo.forRepository(context.application.repositoryOwner, context.application.repositoryName)
+    const transition = () => this.forgejo.forRepository(context.application.repositoryOwner, context.application.repositoryName)
       .transition(context.record.requirementNumber, 'done', null, signal);
+    if (this.withRequirementWriteLock) {
+      await this.withRequirementWriteLock(`requirement-write:${context.application.id}:${context.record.requirementNumber}`, transition);
+    } else {
+      await transition();
+    }
   }
 
   private async deleteBoundVerificationWorkspace(context: DeliveryContext, marker: DeliveryVerificationMarker, signal?: AbortSignal): Promise<void> {
@@ -979,13 +1067,9 @@ export class ImplementationService {
     return this.coderPublicUrl ? coderAppUrl(this.coderPublicUrl, value) : value;
   }
 
-  private coderApps(workspace: CoderWorkspace | undefined): ImplementationApp[] {
+  private coderApps(workspace: CoderWorkspace | undefined): ImplementationRun['developmentApps'] {
     return workspace?.apps.map((app) => ({ ...app, url: this.coderUrl(app.url)! })) ?? [];
   }
-}
-
-function branchName(record: DeliveryRecord): string {
-  return `factory/requirement-${record.requirementNumber}-${record.id.slice(-12)}`;
 }
 
 async function deliveryId(tenantId: string, systemId: string, requirementNumber: number, acceptedDigest: string): Promise<string> {
@@ -1051,7 +1135,7 @@ function projectReview(review: PullReview): ImplementationReview {
     id: review.id,
     state: review.state === 'APPROVED' ? 'approved' : review.state === 'REQUEST_CHANGES' ? 'changes-requested' : 'commented',
     body: review.body,
-    reviewer: review.body.match(/Reviewed in (?:Agentic Software Factory|Agentic Software Factory) by (.+?) \([^\n]+\)\.?$/m)?.[1]?.trim() || review.user.login,
+    reviewer: review.body.match(/Reviewed in Agentic Software Factory by (.+?) \([^\n]+\)\.?$/m)?.[1]?.trim() || review.user.login,
     commitSha: review.commit_id,
     submittedAt: review.submitted_at,
   };

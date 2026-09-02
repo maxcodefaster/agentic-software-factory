@@ -63,10 +63,6 @@ export function renderTokensCss(t = brandTokens): string {
       Object.entries(t.mint).map(([k, v]) => line(`--brand-mint-${k}`, v)),
     ),
     block(
-      'Legacy yellow aliases; use --brand-mint-* in new CSS',
-      Object.keys(t.mint).map((k) => line(`--brand-yellow-${k}`, `var(--brand-mint-${k})`)),
-    ),
-    block(
       'Neutrals — cool/blue-tinted ramp; 900 is the primary foreground',
       Object.keys(t.gray).map((k) => line(`--brand-gray-${k}`, `var(--brand-light-gray-${k})`)),
     ),
@@ -105,12 +101,10 @@ export function renderThemeCss(t = brandTokens): string {
   const block = (label: string, lines: string[]) => [`  /* ${label} */`, ...lines].join('\n');
   const sections = [
     block(
-      'Brand mint; yellow is a compatibility alias',
+      'Brand mint',
       [
         ...Object.keys(t.mint).map((k) => line(`--color-brand-mint-${k}`, `var(--brand-mint-${k})`)),
         line('--color-brand-mint', 'var(--brand-mint-500)'),
-        ...Object.keys(t.mint).map((k) => line(`--color-brand-yellow-${k}`, `var(--brand-yellow-${k})`)),
-        line('--color-brand-yellow', 'var(--brand-yellow-500)'),
         line('--color-brand-ink', 'var(--brand-light-spartan-primary-foreground)'),
       ],
     ),

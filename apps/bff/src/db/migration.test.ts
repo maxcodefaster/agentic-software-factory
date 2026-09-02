@@ -145,6 +145,10 @@ test.skipIf(!process.env.TEST_DATABASE_URL)('migration history applies twice and
     const operations = await database.db.execute<{ count: number }>(sql`select count(*)::int as count from operation where delivery_id = 'delivery-1' and kind = 'coder-chat-create'`);
     expect(operations[0]?.count).toBe(1);
 
+    await database.db.execute("insert into \"user\" (id, name, email, deprovisioned_at) values ('deprovisioned', 'Deprovisioned', 'deprovisioned@example.test', now())");
+    expect(await rejectedConstraint(database.db.execute("insert into delivery_contributor (delivery_id, factory_user_id) values ('delivery-1', 'deprovisioned')")))
+      .toContain('cannot grant authority to deprovisioned user');
+
     await database.db.execute("update operation set state = 'failed', error = 'Coder rejected the request' where idempotency_key = 'create-chat'");
     await database.db.execute("insert into operation (idempotency_key, delivery_id, factory_user_id, kind) values ('retry-chat', 'delivery-1', 'other', 'coder-chat-create')");
     await database.db.execute("update operation set state = 'running', lease_owner = 'worker-1', lease_expires_at = now() + interval '5 minutes' where idempotency_key = 'retry-chat'");

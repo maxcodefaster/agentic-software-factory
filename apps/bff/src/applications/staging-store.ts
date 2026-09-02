@@ -74,12 +74,14 @@ export class StagingStore {
   }
 
   async retry(systemId: string): Promise<void> {
+    const now = new Date();
     await this.db.update(stagingReconciliation).set({
       phase: 'pending', attempts: 0, lastError: null, nextAttemptAt: null,
-      leaseOwner: null, leaseExpiresAt: null, leaseGeneration: sql`${stagingReconciliation.leaseGeneration} + 1`, updatedAt: new Date(),
+      leaseOwner: null, leaseExpiresAt: null, leaseGeneration: sql`${stagingReconciliation.leaseGeneration} + 1`, updatedAt: now,
     }).where(and(
       eq(stagingReconciliation.tenantId, this.tenantId), eq(stagingReconciliation.systemId, systemId),
       inArray(stagingReconciliation.phase, ['pending', 'provisioning', 'healthy', 'retry-wait', 'failed']),
+      or(isNull(stagingReconciliation.leaseOwner), lt(stagingReconciliation.leaseExpiresAt, now)),
     ));
   }
 
@@ -138,6 +140,28 @@ export class StagingStore {
       return { status: 'claimed', generation: record.generation };
     }
     return await this.get(systemId) ? { status: 'busy' } : { status: 'missing' };
+  }
+
+  async renew(systemId: string, owner: string, generation: number, desiredSha: string, now: Date, leaseMs: number): Promise<boolean> {
+    const [record] = await this.db.update(stagingReconciliation).set({
+      leaseExpiresAt: new Date(now.getTime() + leaseMs), updatedAt: now,
+    }).where(and(
+      eq(stagingReconciliation.tenantId, this.tenantId), eq(stagingReconciliation.systemId, systemId),
+      eq(stagingReconciliation.desiredSha, desiredSha), eq(stagingReconciliation.leaseOwner, owner),
+      eq(stagingReconciliation.leaseGeneration, generation), sql`${stagingReconciliation.leaseExpiresAt} > ${now.toISOString()}::timestamptz`,
+    )).returning({ id: stagingReconciliation.systemId });
+    return record !== undefined;
+  }
+
+  async renewDeletion(systemId: string, owner: string, generation: number, now: Date, leaseMs: number): Promise<boolean> {
+    const [record] = await this.db.update(stagingReconciliation).set({
+      leaseExpiresAt: new Date(now.getTime() + leaseMs), updatedAt: now,
+    }).where(and(
+      eq(stagingReconciliation.tenantId, this.tenantId), eq(stagingReconciliation.systemId, systemId),
+      eq(stagingReconciliation.phase, 'deleting'), eq(stagingReconciliation.leaseOwner, owner),
+      eq(stagingReconciliation.leaseGeneration, generation), sql`${stagingReconciliation.leaseExpiresAt} > ${now.toISOString()}::timestamptz`,
+    )).returning({ id: stagingReconciliation.systemId });
+    return record !== undefined;
   }
 
   async finishDeletion(systemId: string, owner: string, generation: number): Promise<boolean> {

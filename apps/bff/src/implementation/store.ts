@@ -17,6 +17,10 @@ export type DeliveryVerificationRecord = typeof deliveryVerification.$inferSelec
 
 const ACTIVE_OPERATION_STATES = ['pending', 'running', 'ambiguous', 'succeeded'] as const;
 
+export function deliveryBranchName(record: Pick<DeliveryRecord, 'id' | 'requirementNumber'>): string {
+  return `factory/requirement-${record.requirementNumber}-${record.id.slice(-12)}`;
+}
+
 export class ImplementationStore {
   constructor(private readonly db: Database, readonly tenantId: string) {}
 
@@ -57,6 +61,17 @@ export class ImplementationStore {
     const existing = await this.contributor(deliveryId, factoryUserId);
     if (!existing) throw new Error('delivery contributor was not recorded');
     return existing;
+  }
+
+  async withActiveContributorGrant<T>(factoryUserId: string, grant: () => Promise<T>): Promise<T> {
+    return this.db.transaction(async (tx) => {
+      const [record] = await tx.select({ id: user.id }).from(user).where(and(
+        eq(user.id, factoryUserId),
+        isNull(user.deprovisionedAt),
+      )).limit(1).for('key share');
+      if (!record) throw Object.assign(new Error('Factory user is deprovisioned'), { status: 403 });
+      return grant();
+    });
   }
 
   async contributor(deliveryId: string, factoryUserId: string): Promise<DeliveryContributorRecord | null> {
@@ -368,6 +383,16 @@ export class ImplementationStore {
     }).where(and(
       eq(deliveryVerification.deliveryId, deliveryId), eq(deliveryVerification.leaseOwner, owner),
       eq(deliveryVerification.leaseGeneration, generation), sql`${deliveryVerification.leaseExpiresAt} > now()`,
+    )).returning({ id: deliveryVerification.deliveryId });
+    return record !== undefined;
+  }
+
+  async renewVerification(deliveryId: string, owner: string, generation: number, now = new Date(), leaseMs = 15 * 60_000): Promise<boolean> {
+    const [record] = await this.db.update(deliveryVerification).set({
+      leaseExpiresAt: new Date(now.getTime() + leaseMs), updatedAt: now,
+    }).where(and(
+      eq(deliveryVerification.deliveryId, deliveryId), eq(deliveryVerification.leaseOwner, owner),
+      eq(deliveryVerification.leaseGeneration, generation), sql`${deliveryVerification.leaseExpiresAt} > ${now.toISOString()}::timestamptz`,
     )).returning({ id: deliveryVerification.deliveryId });
     return record !== undefined;
   }

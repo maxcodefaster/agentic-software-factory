@@ -115,18 +115,20 @@ export function implementationRoutes(
     .get('/api/v1/governance', async ({ request, identity }): Promise<MonitoringResponse | Response> => {
       const scope = requestScope(request, identity!, services);
       const workspaces = await services.coder.summary(scope).catch(() => ({ count: 0, workspaces: [], available: false }));
-      const projectedWorkspaces = workspaces.workspaces.map((workspace) => ({
-        id: workspace.id,
-        name: workspace.name,
-        owner: workspace.owner ?? '',
-        template: workspace.template,
-        status: workspace.status,
-        transition: workspace.transition ?? '',
-        healthy: workspace.healthy,
-        outdated: workspace.outdated ?? false,
-        lastUsedAt: workspace.lastUsedAt,
-        kind: workspace.parameters.workspace_kind === 'verification' ? 'verification' as const : 'developer' as const,
-      }));
+      const projectedWorkspaces = workspaces.workspaces
+        .filter((workspace) => workspace.parameters.workspace_kind !== 'staging')
+        .map((workspace) => ({
+          id: workspace.id,
+          name: workspace.name,
+          owner: workspace.owner ?? '',
+          template: workspace.template,
+          status: workspace.status,
+          transition: workspace.transition ?? '',
+          healthy: workspace.healthy,
+          outdated: workspace.outdated ?? false,
+          lastUsedAt: workspace.lastUsedAt,
+          kind: workspace.parameters.workspace_kind === 'verification' ? 'verification' as const : 'developer' as const,
+        }));
       return {
         generatedAt: new Date().toISOString(),
         workspaces: { available: workspaces.available, count: projectedWorkspaces.length, workspaces: projectedWorkspaces },

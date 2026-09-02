@@ -449,6 +449,8 @@ spec:
           args:
             - bun dist/db/run-migrations.js && bun dist/bootstrap-users.js
           env:
+            - name: FACTORY_ENVIRONMENT
+              value: local
             - name: HOME
               value: /tmp
             - name: XDG_CACHE_HOME
@@ -518,6 +520,8 @@ spec:
           image: dev.local/agentic-software-factory-bff:0.1.0-local
           imagePullPolicy: IfNotPresent
           env:
+            - name: FACTORY_ENVIRONMENT
+              value: local
             - name: HOME
               value: /tmp
             - name: XDG_CACHE_HOME
@@ -639,6 +643,8 @@ spec:
                 secretKeyRef:
                   name: factory-runtime
                   key: coder-staging-owner-id
+            - name: FACTORY_CODER_RESTRICTED_APP_SHARING
+              value: authenticated
             - name: CODER_URL
               value: http://coder.coder.svc.cluster.local
             - name: CODER_PUBLIC_URL

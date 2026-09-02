@@ -124,6 +124,20 @@ test.skipIf(!database)('a new staging desired SHA immediately fences the old lea
   expect(await store.claim('owner/staging-race', 'replica-c', new Date(), 60_000)).toBeNull();
 });
 
+test.skipIf(!database)('manual staging retry cannot clear a live lease', async () => {
+  await database!.db.execute(`insert into system_registration (tenant_id, system_id, team_id, forgejo_owner, forgejo_repository) values ('tenant', 'owner/staging-retry', 'team', 'owner', 'staging-retry')`);
+  const store = new StagingStore(database!.db, 'tenant');
+  const sha = 'f'.repeat(40);
+  await store.desire('owner/staging-retry', sha);
+  const generation = await store.claim('owner/staging-retry', 'replica-a', new Date(), 60_000);
+
+  await store.retry('owner/staging-retry');
+
+  expect(await store.claim('owner/staging-retry', 'replica-b', new Date(), 60_000)).toBeNull();
+  expect(await store.renew('owner/staging-retry', 'replica-a', generation!, sha, new Date(), 60_000)).toBe(true);
+  expect(await store.get('owner/staging-retry')).toMatchObject({ phase: 'provisioning' });
+});
+
 test.skipIf(!database)('re-registering reactivates a retained deleting staging row and reaches healthy', async () => {
   const lifecycle = new DatabaseOnboardingLifecycleStore(database!.db, 'tenant');
   const applications = new ApplicationStore(database!.db, 'tenant');

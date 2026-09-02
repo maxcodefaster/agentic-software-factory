@@ -58,6 +58,7 @@ grep -F -- '--variable git_ca_secret=factory-ca' "$tmp/args" >/dev/null
 grep -F -- '--variable envbuilder_cache_repo=' "$tmp/args" >/dev/null
 grep -F -- '--variable verification_owner=factory-verification' "$tmp/args" >/dev/null
 grep -F -- '--variable staging_owner=factory-stage' "$tmp/args" >/dev/null
+grep -F -- '--variable restricted_app_sharing=authenticated' "$tmp/args" >/dev/null
 grep -F -- '--variable default_repository_url=https://forgejo.example.test/factory/system.git' "$tmp/args" >/dev/null
 grep -F -- '--variable default_repository_ref=1111111111111111111111111111111111111111' "$tmp/args" >/dev/null
 jq -s -e 'any(.[]; .metadata.name == "factory-forgejo-clone" and .data.token == "Y2xvbmU=")' "$tmp/secrets" >/dev/null

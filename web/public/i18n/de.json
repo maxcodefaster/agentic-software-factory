@@ -192,12 +192,6 @@
     "close": "Schließen",
     "delete": "Löschen"
   },
-  "theme": {
-    "toLight": "Zu hellem Design wechseln",
-    "toDark": "Zu dunklem Design wechseln",
-    "light": "Helles Design",
-    "dark": "Dunkles Design"
-  },
   "locale": {
     "label": "Sprache",
     "switchTo": "Zu Englisch wechseln",
@@ -285,18 +279,6 @@
     },
     "release": {"open":"Forgejo-Releases"}
   },
-  "settings": {
-    "account": "Konto",
-    "connectedSourcesDesc": "Verbundene Quellen — automatisch über dein Konto angebunden.",
-    "connected": "Verbunden",
-    "notConnected": "Nicht verbunden",
-    "forgejoDesc": "Verbindung erfolgt automatisch über dein Konto.",
-    "signOut": "Abmelden",
-    "pleaseSignIn": "Bitte melde dich an.",
-    "adminLogin": "Admin-Login (temporär)",
-    "password": "Passwort",
-    "loginFailed": "Anmeldung fehlgeschlagen — E-Mail oder Passwort prüfen."
-  },
   "team": {
     "section": "Zusammenarbeit",
     "title": "Team verwalten",
@@ -328,42 +310,6 @@
     "errCreate": "Team konnte nicht angelegt werden.",
     "closeMenu": "Teammenü schließen",
     "noActiveTeam": "Kein Team"
-  },
-  "system": {
-    "none": "Kein System",
-    "new": "Neues System"
-  },
-  "admin": {
-    "platform": "Plattform",
-    "noAccess": "Kein Zugriff — dieser Bereich ist Plattform-Admins vorbehalten.",
-    "model": {
-      "title": "KI-Modell",
-      "desc": "Welches Modell die Plattform für alle KI-Funktionen nutzt. API-Schlüssel bleiben im Cluster (Secret) — hier wird nur das Modell gewählt. Eine Umstellung wirkt sofort, ohne Deploy.",
-      "loading": "Modell-Konfiguration wird geladen …",
-      "active": "Aktives Modell",
-      "keySet": "Schlüssel hinterlegt",
-      "keyNotSet": "Kein Schlüssel hinterlegt",
-      "noProvider": "Kein Provider konfiguriert — hinterlege einen API-Schlüssel (Secret), um das Modell zu wechseln.",
-      "selectModel": "Modell wählen",
-      "testModel": "Modell testen",
-      "activate": "Aktivieren",
-      "probeOk": "Modell antwortet (strukturierte Ausgabe ok)",
-      "switched": "Umgestellt",
-      "codingAgent": "Coding-Agent (opencode):",
-      "testFailed": "Test fehlgeschlagen.",
-      "switchFailed": "Umstellung fehlgeschlagen.",
-      "configLoadFailed": "Modell-Konfiguration konnte nicht geladen werden."
-    },
-    "prompts": {
-      "title": "Prompts",
-      "desc": "Das aktive Prompt-Paket — das modellseitige Prompt-Profil (Sprache + Feinschliff) für die Agenten und Coding-Tickets. Englisch ist der neutrale Standard; Deutsch ist als vollständiges Paket verfügbar.",
-      "loading": "Prompt-Pakete werden geladen …",
-      "select": "Prompt-Paket",
-      "activate": "Paket wechseln",
-      "switched": "Paket gewechselt.",
-      "switchFailed": "Prompt-Paket konnte nicht gewechselt werden.",
-      "configLoadFailed": "Prompt-Konfiguration konnte nicht geladen werden."
-    }
   },
   "board": {
     "ticketNotFound": "Ticket #{{number}} wurde nicht gefunden.",
@@ -455,12 +401,6 @@
     "moveBackQuestion": "Zurück nach {{column}}?",
     "moveBackTo": "Zurück nach {{column}}",
     "moveBackHistory": "Der bisherige Verlauf bleibt erhalten."
-  },
-  "notifications": {
-    "title": "Benachrichtigungen",
-    "new": "{{count}} neu",
-    "markAllRead": "Alle gelesen",
-    "empty": "Keine Benachrichtigungen."
   },
   "card": {
     "answerCount": "{{count}} bisherige Antworten",
@@ -631,26 +571,5 @@
     "applicationsHint": "Wähle alle betroffenen Anwendungen.",
     "noApplications": "Dieses Team hat noch keine Anwendungen.",
     "saveApplications": "Anwendungen speichern"
-  },
-  "notif": {
-    "pr": {
-      "started": "Umsetzung gestartet: {{card}}",
-      "preview": "Vorschau live: {{card}}",
-      "ready": "Bereit zur Review: {{card}}",
-      "draft": "Build nicht grün: {{card}}",
-      "failed": "Build fehlgeschlagen: {{card}}",
-      "merged": "Gemergt: {{card}}",
-      "body": "Zielsystem {{sys}}"
-    },
-    "interview": {
-      "finalizedTitle": "Anforderung geklärt: {{card}}",
-      "finalizedBody": "Das KI-Interview hat eine testbare Spezifikation erstellt — bereit zur Umsetzung."
-    },
-    "provision": {
-      "creatingTitle": "Baustein „{{name}}“ wird bereitgestellt",
-      "creatingBody": "{{engine}} — ArgoCD wendet das Manifest an, der Operator provisioniert. Verbinde deine App über das Secret „{{secret}}“.",
-      "removingTitle": "Baustein „{{name}}“ wird entfernt",
-      "removingBody": "Die Claim wurde gelöscht — ArgoCD entfernt Workloads, Volumes und Daten."
-    }
   }
 }

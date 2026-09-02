@@ -6,55 +6,46 @@
 set -eu
 
 factory_url="${FACTORY_URL:-http://factory.localhost}"
-auth_mode="${SMOKE_AUTH_MODE:-local}"
 system_id="${FACTORY_SYSTEM_ID:-factory/example}"
 application=$(printf '%s' "$system_id" | jq -sRr @uri)
 cookie_jar=$(mktemp)
+admin_cookie_jar=$(mktemp)
 number=
 cleanup() {
   [ -z "$number" ] || factory_curl -fsS -X DELETE "$factory_url/api/v1/requirements/$number?$scope" >/dev/null 2>&1 || true
-  rm -f "$cookie_jar"
+  rm -f "$cookie_jar" "$admin_cookie_jar"
 }
 trap cleanup EXIT HUP INT TERM
 
-case "$auth_mode" in
-  local)
-    email="${SMOKE_AUTH_EMAIL:-${AUTH_E2E_BUSINESS_EMAIL:-business@example.test}}"
-    password="${SMOKE_AUTH_PASSWORD:-${AUTH_E2E_BUSINESS_PASSWORD:?AUTH_E2E_BUSINESS_PASSWORD or SMOKE_AUTH_PASSWORD is required for local authentication}}"
-    unauthenticated_status=$(curl -sS -o /dev/null -w '%{http_code}' "$factory_url/api/v1/session")
-    [ "$unauthenticated_status" = 401 ] || {
-      printf 'Expected authentication to be enforced, got HTTP %s. Use SMOKE_AUTH_MODE=disabled only for an AUTH_DISABLED stack.\n' "$unauthenticated_status" >&2
-      exit 1
-    }
-    curl -fsS -c "$cookie_jar" \
-      -H "Origin: ${SMOKE_AUTH_ORIGIN:-http://factory.localhost}" \
-      -H 'Content-Type: application/json' \
-      -d "$(jq -cn --arg email "$email" --arg password "$password" '{email:$email,password:$password}')" \
-      "$factory_url/sign-in/email" >/dev/null
-    ;;
-  disabled)
-    ;;
-  *)
-    printf 'SMOKE_AUTH_MODE must be local or disabled\n' >&2
-    exit 2
-    ;;
-esac
+email="${SMOKE_AUTH_EMAIL:-${AUTH_E2E_BUSINESS_EMAIL:-business@example.test}}"
+password="${SMOKE_AUTH_PASSWORD:-${AUTH_E2E_BUSINESS_PASSWORD:?AUTH_E2E_BUSINESS_PASSWORD or SMOKE_AUTH_PASSWORD is required}}"
+unauthenticated_status=$(curl -sS -o /dev/null -w '%{http_code}' "$factory_url/api/v1/session")
+[ "$unauthenticated_status" = 401 ] || {
+  printf 'Expected authentication to be enforced, got HTTP %s.\n' "$unauthenticated_status" >&2
+  exit 1
+}
+curl -fsS -c "$cookie_jar" \
+  -H "Origin: ${SMOKE_AUTH_ORIGIN:-http://factory.localhost}" \
+  -H 'Content-Type: application/json' \
+  -d "$(jq -cn --arg email "$email" --arg password "$password" '{email:$email,password:$password}')" \
+  "$factory_url/sign-in/email" >/dev/null
+admin_email="${SMOKE_ADMIN_EMAIL:-developer@example.test}"
+admin_password="${SMOKE_ADMIN_PASSWORD:?SMOKE_ADMIN_PASSWORD is required}"
+curl -fsS -c "$admin_cookie_jar" \
+  -H "Origin: ${SMOKE_AUTH_ORIGIN:-http://factory.localhost}" \
+  -H 'Content-Type: application/json' \
+  -d "$(jq -cn --arg email "$admin_email" --arg password "$admin_password" '{email:$email,password:$password}')" \
+  "$factory_url/sign-in/email" >/dev/null
 
 factory_curl() {
-  if [ "$auth_mode" = local ]; then
-    curl -b "$cookie_jar" "$@"
-  else
-    curl "$@"
-  fi
+  curl -b "$cookie_jar" "$@"
 }
 
 curl -fsS "$factory_url/healthz" >/dev/null
 curl -fsS "$factory_url/readyz" | jq -e '.status == "ready"' >/dev/null
-curl -fsS "$factory_url/statusz" | jq -e '.status == "ok" and (.capabilities.aiInterview == "available" or .capabilities.aiInterview == "unavailable")' >/dev/null
+curl -fsS -b "$admin_cookie_jar" "$factory_url/statusz" | jq -e '.status == "ok" and (.capabilities.aiInterview == "available" or .capabilities.aiInterview == "unavailable")' >/dev/null
 session=$(factory_curl -fsS "$factory_url/api/v1/session")
-if [ "$auth_mode" = local ]; then
-  printf '%s' "$session" | jq -e '.admin == false' >/dev/null
-fi
+printf '%s' "$session" | jq -e '.admin == false' >/dev/null
 
 scope="team=factory&application=$application"
 created="$(factory_curl -fsS -X POST "$factory_url/api/v1/requirements?$scope" \

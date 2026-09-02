@@ -8,6 +8,7 @@ terraform = "1.13"
 helm = "4.0"
 bun = "1.3.14"
 actionlint = "1.7.7"
+yq = "4.47.2"
 
 [tasks.up]
 description = "Bring up the local stack for a system repository"

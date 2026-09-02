@@ -6,6 +6,7 @@
 
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
+import type { Observable } from 'rxjs';
 
 import { KanbanClient } from './kanban.client';
 
@@ -54,6 +55,22 @@ describe('KanbanClient', () => {
     expect(error).toBeTruthy();
   });
 
+  it.each([
+    ['proposal', (client: KanbanClient, context: any, card: any, spec: any) => client.saveProposal(context, card, spec), '/proposal'],
+    ['acceptance', (client: KanbanClient, context: any, card: any, spec: any) => client.accept(context, card, spec), '/accept'],
+  ])('rejects a malformed %s response', (_kind, request, suffix) => {
+    const client = TestBed.inject(KanbanClient);
+    const context = { team: 'factory', application: 'factory/example-application' };
+    const card = { ...controllerCard, id: 'factory/example-application#6', systemId: 'factory/example-application' };
+    const specification = { goal: 'Proof', users: [], userStories: [], acceptanceCriteria: ['Exists'], nonFunctionalRequirements: [], moscow: { must: [], should: [], could: [] }, openQuestions: [], nonGoals: [] };
+    let error: unknown;
+
+    (request(client, context, card, specification) as Observable<unknown>).subscribe({ error: (failure: unknown) => { error = failure; } });
+    TestBed.inject(HttpTestingController).expectOne(`/api/v1/requirements/6${suffix}?team=factory&application=factory%2Fexample-application`).flush({ digest: 7 });
+
+    expect(error).toBeTruthy();
+  });
+
   it('retains the scoped System across update, move, and acceptance responses', () => {
     const client = TestBed.inject(KanbanClient);
     const http = TestBed.inject(HttpTestingController);
@@ -75,7 +92,10 @@ describe('KanbanClient', () => {
     expect(moved?.systemId).toBe(card.systemId);
 
     client.accept(context, moved!, { goal: 'Proof', users: [], userStories: [], acceptanceCriteria: ['Exists'], nonFunctionalRequirements: [], moscow: { must: [], should: [], could: [] }, openQuestions: [], nonGoals: [] }).subscribe();
-    http.expectOne('/api/v1/requirements/6/accept?team=factory&application=factory%2Fexample-application').flush({ digest: 'sha256:accepted' });
+    http.expectOne('/api/v1/requirements/6/accept?team=factory&application=factory%2Fexample-application').flush({
+      requirementId: 'factory/requirements#6', revision: 'revision-1', digest: 'sha256:accepted',
+      path: 'requirements/6.json', commitSha: '0123456789abcdef0123456789abcdef01234567',
+    });
   });
 
   it('does not retarget a card request when its context changes after dispatch', () => {

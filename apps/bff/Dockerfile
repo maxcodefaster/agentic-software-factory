@@ -5,6 +5,30 @@
 
 FROM oven/bun:1.3.14-alpine@sha256:5acc90a93e91ff07bf72aa90a7c9f0fa189765aec90b47bdbf2152d2196383c0 AS bun
 
+FROM alpine/git:v2.49.1@sha256:c0280cf9572316299b08544065d3bf35db65043d5e3963982ec50647d2746e26 AS git
+
+FROM bun AS runtime
+USER root
+COPY --from=git /usr/bin/git /usr/bin/git
+COPY --from=git /usr/libexec/git-core /usr/libexec/git-core
+COPY --from=git /usr/share/git-core /usr/share/git-core
+COPY --from=git /usr/lib/libbrotlicommon.so.1* /usr/lib/
+COPY --from=git /usr/lib/libbrotlidec.so.1* /usr/lib/
+COPY --from=git /usr/lib/libcares.so.2* /usr/lib/
+COPY --from=git /usr/lib/libcrypto.so.3 /usr/lib/
+COPY --from=git /usr/lib/libcurl.so.4* /usr/lib/
+COPY --from=git /usr/lib/libidn2.so.0* /usr/lib/
+COPY --from=git /usr/lib/libnghttp2.so.14* /usr/lib/
+COPY --from=git /usr/lib/libpcre2-8.so.0* /usr/lib/
+COPY --from=git /usr/lib/libpsl.so.5* /usr/lib/
+COPY --from=git /usr/lib/libssl.so.3 /usr/lib/
+COPY --from=git /usr/lib/libunistring.so.5* /usr/lib/
+COPY --from=git /usr/lib/libz.so.1* /usr/lib/
+COPY --from=git /usr/lib/libzstd.so.1* /usr/lib/
+RUN test "$(bun --version)" = "1.3.14" \
+ && test "$(git --version)" = "git version 2.49.1" \
+ && test "$(git --exec-path)" = "/usr/libexec/git-core"
+
 FROM node:24.15.0-alpine@sha256:d1b3b4da11eefd5941e7f0b9cf17783fc99d9c6fc34884a665f40a06dbdfc94f AS dependencies
 WORKDIR /src
 COPY --from=bun /usr/local/bin/bun /usr/local/bin/bun
@@ -32,16 +56,14 @@ COPY packages/design-system ./packages/design-system
 RUN --mount=type=cache,target=/src/web/.angular/cache \
     cd web && bun run build
 
-FROM oven/bun:1.3.14-alpine@sha256:5acc90a93e91ff07bf72aa90a7c9f0fa189765aec90b47bdbf2152d2196383c0
+FROM runtime
 WORKDIR /app
 USER root
-RUN apk upgrade --no-cache libcrypto3 libssl3 \
- && apk add --no-cache git=2.49.1-r0 \
- && test "$(git version)" = "git version 2.49.1" \
- && addgroup -g 10001 factory \
+RUN addgroup -g 10001 factory \
  && adduser -D -u 10001 -G factory factory
 ENV NODE_ENV=production
 ENV WEB_ROOT=/app/web
+ENTRYPOINT []
 COPY --from=bff-build /src/apps/bff/dist ./dist
 COPY apps/bff/drizzle ./drizzle
 COPY apps/bff/package.json ./

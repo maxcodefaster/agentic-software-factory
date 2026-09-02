@@ -51,6 +51,11 @@ before local cleanup. `mise run reset --data` is destructive and requires
 OrbStack, create-time namespace ownership markers, and explicit confirmation.
 `down` never deletes stack data.
 
+The manual CI E2E job uses the protected `factory-e2e` environment and accepts
+only the repository default branch. Its `factory-e2e` runner group must contain
+ephemeral, single-job runners. Never place long-lived credentials or unrelated
+workloads on that runner group.
+
 Keep changes narrow. Add tests for observable behavior and update documentation
 when a contract changes. Do not commit secrets, generated build output,
 `.env.local`, or Terraform state.

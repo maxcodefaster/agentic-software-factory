@@ -81,7 +81,6 @@ export interface SystemContract {
   supervisor: z.infer<typeof supervisorSchema>;
   startupTimeoutSeconds: number;
   applications: Array<z.infer<typeof applicationSchema>>;
-  releaseManifest?: string;
   developer: WorkspaceContract;
   verification: WorkspaceContract;
 }
@@ -100,7 +99,6 @@ export function systemContractReferences(manifestSource: string): SystemContract
   const manifest = parsed.manifest;
   const paths = [manifest.development.devcontainer, manifest.verification.devcontainer];
   if (manifest.runtime.supervisor.kind === 'process-compose') paths.push(manifest.runtime.supervisor.config);
-  if (manifest.release) paths.push(manifest.release.manifest);
   return { valid: true, paths: [...new Set(paths)] };
 }
 
@@ -111,7 +109,6 @@ export function inspectSystemContract(manifestSource: string, artifacts: Readonl
   const issues: CompatibilityIssue[] = [];
   const requiredPaths = [manifest.development.devcontainer, manifest.verification.devcontainer];
   if (manifest.runtime.supervisor.kind === 'process-compose') requiredPaths.push(manifest.runtime.supervisor.config);
-  if (manifest.release) requiredPaths.push(manifest.release.manifest);
   for (const path of new Set(requiredPaths)) {
     if (!artifacts.has(path)) issues.push({ path, code: 'missing-file', message: `Required by .factory/system.yaml but ${path} does not exist at this commit.` });
   }
@@ -148,7 +145,6 @@ export function inspectSystemContract(manifestSource: string, artifacts: Readonl
       supervisor: manifest.runtime.supervisor,
       startupTimeoutSeconds: manifest.runtime.startupTimeoutSeconds,
       applications: manifest.applications,
-      ...(manifest.release ? { releaseManifest: manifest.release.manifest } : {}),
       developer: {
         apps: developer,
         devcontainerPath: manifest.development.devcontainer,

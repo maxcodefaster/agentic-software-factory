@@ -44,7 +44,7 @@ run "developer_workspace" {
   }
   override_data {
     target = data.coder_parameter.repository_apps
-    values = { value = "[{\"slug\":\"app\",\"displayName\":\"App\",\"url\":\"http://127.0.0.1:3000\",\"share\":\"authenticated\",\"subdomain\":true},{\"slug\":\"api\",\"displayName\":\"API\",\"url\":\"http://localhost:8080\",\"share\":\"authenticated\",\"subdomain\":true},{\"slug\":\"manager\",\"displayName\":\"Manager\",\"command\":\"process-compose attach\",\"share\":\"owner\"}]" }
+    values = { value = "[{\"slug\":\"app\",\"displayName\":\"App\",\"url\":\"http://127.0.0.1:3000\",\"share\":\"authenticated\",\"subdomain\":true},{\"slug\":\"api\",\"displayName\":\"API\",\"url\":\"http://localhost:8080\",\"share\":\"authenticated\",\"subdomain\":true}]" }
   }
   override_data {
     target = data.coder_parameter.supervisor_commands
@@ -130,7 +130,7 @@ run "developer_workspace" {
     error_message = "Registry credentials must not remain mounted in the repository runtime."
   }
   assert {
-    condition     = coder_app.url["app"].share == "owner" && coder_app.url["app"].url == "http://127.0.0.1:3000" && coder_app.command["manager"].share == "owner" && coder_app.command["manager"].command == "process-compose attach"
+    condition     = coder_app.url["app"].share == "owner" && coder_app.url["app"].url == "http://127.0.0.1:3000"
     error_message = "Developer repository apps must be owner-only."
   }
   assert {
@@ -198,7 +198,7 @@ run "staging_workspace" {
   }
   override_data {
     target = data.coder_parameter.repository_apps
-    values = { value = "[{\"slug\":\"app\",\"displayName\":\"App\",\"url\":\"http://127.0.0.1:3000\",\"share\":\"owner\",\"subdomain\":true},{\"slug\":\"manager\",\"displayName\":\"Manager\",\"command\":\"process-compose attach\",\"share\":\"owner\"}]" }
+    values = { value = "[{\"slug\":\"app\",\"displayName\":\"App\",\"url\":\"http://127.0.0.1:3000\",\"share\":\"owner\",\"subdomain\":true}]" }
   }
   override_data {
     target = data.coder_parameter.devcontainer_path
@@ -226,8 +226,8 @@ run "staging_workspace" {
     error_message = "Staging must not receive a human Forgejo token."
   }
   assert {
-    condition     = coder_app.url["app"].share == "authenticated" && length(coder_app.command) == 0
-    error_message = "Staging must force URL apps to authenticated and expose no command apps."
+    condition     = coder_app.url["app"].share == "authenticated"
+    error_message = "Staging must force URL apps to authenticated."
   }
   assert {
     condition     = coder_agent.main.env["CODER_AGENT_DEVCONTAINERS_ENABLE"] == "false" && one([for container in kubernetes_deployment_v1.workspace[0].spec[0].template[0].spec[0].container : one([for item in container.env : item.value if item.name == "CODER_AGENT_DEVCONTAINERS_ENABLE"]) if container.name == "agent"]) == "false"
@@ -303,7 +303,7 @@ run "staging_supports_non_web_system" {
   }
 
   assert {
-    condition     = length(coder_app.url) == 0 && length(coder_app.command) == 0 && length(kubernetes_deployment_v1.workspace) == 1
+    condition     = length(coder_app.url) == 0 && length(kubernetes_deployment_v1.workspace) == 1
     error_message = "A non-web System must run without synthetic Coder applications."
   }
 }
@@ -356,7 +356,7 @@ run "verification_workspace" {
     error_message = "Verification must not receive a human Forgejo token."
   }
   assert {
-    condition     = coder_app.url["app"].share == "authenticated" && length(coder_app.command) == 0
+    condition     = coder_app.url["app"].share == "authenticated"
     error_message = "Verification workspaces must expose only authenticated URL apps."
   }
 }

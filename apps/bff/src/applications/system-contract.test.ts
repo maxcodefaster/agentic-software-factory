@@ -94,9 +94,27 @@ applications: []
     expect(result.issues.map((issue) => issue.code)).toEqual(expect.arrayContaining(['verification-not-readonly', 'invalid-workspace-folder']));
   });
 
-  test('ignores legacy IDE task metadata because Factory generates user tasks', () => {
-    const legacy = manifest.replace('applications:', 'ide:\n  tasks: .vscode/tasks.json\n  processTask: Dev Processes\napplications:');
-    expect(inspectSystemContract(legacy, files)).toMatchObject({ compatible: true });
+  test('rejects unsupported runtime fields, missing startup commands, and implicit Dockerfile targets', () => {
+    const broken = new Map(files);
+    broken.set('.devcontainer/devcontainer.json', JSON.stringify({
+      build: { dockerfile: 'Dockerfile' },
+      privileged: true,
+      postStartCommand: '',
+    }));
+    const result = inspectSystemContract(manifest, broken);
+    expect(result.compatible).toBe(false);
+    if (result.compatible) return;
+    expect(result.issues.map((issue) => issue.code)).toEqual(expect.arrayContaining([
+      'missing-build-target', 'unsupported-field', 'missing-start-lifecycle',
+    ]));
+  });
+
+  test('accepts and ignores deprecated v1 IDE and release fields', () => {
+    const legacy = manifest.replace('applications:', 'ide:\n  tasks: .vscode/tasks.json\n  processTask: Dev Processes\nrelease:\n  manifest: .factory/release.yaml\napplications:');
+    const result = inspectSystemContract(legacy, files);
+    expect(result).toMatchObject({ compatible: true });
+    if (!result.compatible) return;
+    expect(result.contract).not.toHaveProperty('releaseManifest');
   });
 
   test('allows omitted Coder apps and rejects duplicated metadata drift', () => {

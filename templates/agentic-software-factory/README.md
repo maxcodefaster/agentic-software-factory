@@ -9,8 +9,12 @@ the requested commit, while verification uses `.devcontainer/verification/devcon
 The clone token is mounted only in the clone init container. Verification source is
 read-only. Staging source remains writable so the developer Dev Container can
 run its normal lifecycle. Staging and verification keep the Coder token in a mountless
-`no_user_data` agent sidecar, expose only authenticated URL apps, and must belong
-to their configured locked automation owners. `staging_owner` defaults to
+`no_user_data` agent sidecar and must belong to their configured locked
+automation owners. `restricted_app_sharing` controls their URL apps. `owner`
+limits them to the workspace owner and Coder principals whose RBAC grants
+application-connect permission. `authenticated` allows every
+authenticated user in the Coder deployment, not only members of a Factory team
+or the workspace's Coder organization. `staging_owner` defaults to
 `factory-stage`; `verification_owner` remains
 `factory-verification`.
 
@@ -29,8 +33,9 @@ prompts for this exact-SHA, owner-only IDE so folder-open tasks run without a
 prompt. It also removes the welcome page, walkthrough, breadcrumbs, minimap,
 extension recommendations, and telemetry while retaining Explorer, Search,
 Source Control, Run and Debug, Problems, and the integrated terminal. Browser
-services remain the existing Coder applications derived from the System
-contract and are directly available from Factory and the Coder workspace page.
+services remain Coder applications derived from the System contract. Factory
+publishes restricted preview links only when `restricted_app_sharing` is
+`authenticated`.
 VS Code's separate Copilot-style Chat, Agent, command-center, and MCP surfaces
 are disabled to avoid presenting a second implementation agent. Ticket
 implementation remains the Coder Agent started and tracked by Factory.

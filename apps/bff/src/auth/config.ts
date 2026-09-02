@@ -118,6 +118,10 @@ function clientFromEnv(
   }
   if (clientSecret.length < 16) throw new Error(`${prefix}_OIDC_CLIENT_SECRET must be at least 16 characters`);
   if (new Set(redirectUris).size !== redirectUris.length) throw new Error(`${prefix}_OIDC_REDIRECT_URIS must not contain duplicates`);
+  const postLogoutRedirectUris = list(env[`${prefix}_OIDC_POST_LOGOUT_REDIRECT_URIS`]);
+  if (new Set(postLogoutRedirectUris).size !== postLogoutRedirectUris.length) {
+    throw new Error(`${prefix}_OIDC_POST_LOGOUT_REDIRECT_URIS must not contain duplicates`);
+  }
   if (prefix === 'FORGEJO' && env.FORGEJO_OIDC_COMPATIBILITY_MAJOR?.trim() !== '15') {
     throw new Error('FORGEJO_OIDC_COMPATIBILITY_MAJOR must be 15 for the stock Forgejo no-PKCE policy');
   }
@@ -125,7 +129,7 @@ function clientFromEnv(
     clientId,
     clientSecret,
     redirectUris: redirectUris.map((value) => url(value, `${prefix}_OIDC_REDIRECT_URIS`)),
-    postLogoutRedirectUris: list(env[`${prefix}_OIDC_POST_LOGOUT_REDIRECT_URIS`]).map((value) => url(value, `${prefix}_OIDC_POST_LOGOUT_REDIRECT_URIS`)),
+    postLogoutRedirectUris: postLogoutRedirectUris.map((value) => url(value, `${prefix}_OIDC_POST_LOGOUT_REDIRECT_URIS`)),
     policy: prefix === 'CODER' ? 'coder' : 'forgejo-15',
   };
 }

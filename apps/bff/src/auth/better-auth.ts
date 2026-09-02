@@ -97,10 +97,10 @@ export function createFactoryAuth(db: Database, config: FactoryAuthConfig) {
         create: {
           before: async (session) => {
             const user = await db.query.user.findFirst({
-              columns: { groups: true },
+              columns: { groups: true, deprovisionedAt: true },
               where: (table, { eq }) => eq(table.id, session.userId),
             });
-            return user?.groups.includes(config.requiredGroup) ? undefined : false;
+            return !user?.deprovisionedAt && user?.groups.includes(config.requiredGroup) ? undefined : false;
           },
         },
       },

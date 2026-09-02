@@ -11,7 +11,12 @@ import { closeDatabase, migrateDatabase } from './migrate';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL is required');
-const database = createDatabase(databaseUrl);
+const environment = process.env.FACTORY_ENVIRONMENT ?? 'local';
+const tlsCa = process.env.DATABASE_TLS_CA?.trim();
+if (environment === 'production' && (new URL(databaseUrl).searchParams.get('sslmode') !== 'verify-full' || !tlsCa)) {
+  throw new Error('production DATABASE_URL must set sslmode=verify-full and DATABASE_TLS_CA must contain the PostgreSQL CA PEM');
+}
+const database = createDatabase(databaseUrl, tlsCa);
 try {
   await migrateDatabase(database.db, resolve(import.meta.dir, '../../drizzle'));
 } finally {

@@ -27,6 +27,12 @@ import { fetchUpstream, isUpstreamStatus, upstreamHttpError } from "../integrati
 import { GitBranchSynchronizer, type GitSynchronizationResult } from '../implementation/git-sync';
 import { ApplicationError } from '../errors';
 import { z } from 'zod';
+import type {
+  ApplicationRef,
+  RequirementAcceptance as AcceptanceResult,
+  RequirementProposal as Proposal,
+  RequirementSpec,
+} from '@agentic-software-factory/api-contracts/kanban';
 
 export const statuses = ["ideation", "requirements", "implementation", "done"] as const;
 export const BOARD_PAGE_SIZE = 50;
@@ -70,52 +76,8 @@ export interface Issue {
   updated_at: string;
 }
 
-export interface ApplicationRef {
-  id: string;
-  name: string;
-}
-
-export interface Moscow {
-  must: string[];
-  should: string[];
-  could: string[];
-}
-
-export interface RequirementSpec {
-  goal: string;
-  users: string[];
-  userStories: string[];
-  acceptanceCriteria: string[];
-  nonFunctionalRequirements: string[];
-  moscow: Moscow;
-  openQuestions: string[];
-  nonGoals: string[];
-}
-
-export interface Proposal {
-  specification: RequirementSpec;
-  proposedBy: string;
-  proposedAt: string;
-  provenance?: ProposalProvenance;
-}
-
-export interface ProposalProvenance {
-  source: "coder-ai";
-  teamId: string;
-  repository: string;
-  requirementNumber: number;
-  runId: string;
-  chatId: string;
-  proposalNonce: string;
-}
-
-export interface AcceptanceResult {
-  requirementId: string;
-  revision: string;
-  digest: string;
-  path: string;
-  commitSha: string;
-}
+export type { ApplicationRef, AcceptanceResult, Proposal, RequirementSpec };
+export type ProposalProvenance = NonNullable<Proposal['provenance']>;
 
 export interface AcceptanceMetadata extends AcceptanceResult {
   acceptedAt: string;
@@ -160,6 +122,7 @@ export interface PullRequest {
   merged: boolean;
   mergeable: boolean;
   merged_commit_id?: string | null;
+  merge_base?: string | null;
   head: { label: string; ref: string; sha: string };
   base: { label: string; ref: string; sha: string };
 }
@@ -182,6 +145,26 @@ export interface PullReview {
   submitted_at: string;
 }
 
+export interface RepositoryCommit {
+  sha: string;
+  parents: Array<{ sha: string }>;
+}
+
+interface BranchProtection {
+  status_check_contexts?: string[];
+  required_approvals?: number;
+  enable_push_whitelist?: boolean;
+  push_whitelist_usernames?: string[];
+  push_whitelist_teams?: string[];
+  push_whitelist_deploy_keys?: boolean;
+  enable_merge_whitelist?: boolean;
+  merge_whitelist_usernames?: string[];
+  merge_whitelist_teams?: string[];
+  enable_approvals_whitelist?: boolean;
+  approvals_whitelist_username?: string[];
+  approvals_whitelist_teams?: string[];
+}
+
 export interface Repository {
   name: string;
   full_name: string;
@@ -201,7 +184,6 @@ const authenticatedUserSchema = z.object({ login: z.string() }).passthrough();
 export interface ClientOptions {
   fetch?: Fetch;
   now?: () => Date;
-  randomBytes?: (length: number) => Uint8Array;
   timeoutMs?: number;
 }
 
@@ -241,7 +223,6 @@ export class ForgejoClient {
   private readonly repository: string;
   private readonly branch: string;
   private readonly fetch: Fetch;
-  private readonly randomBytes: (length: number) => Uint8Array;
   private readonly timeoutMs: number;
   private branchProtectionActors?: { mergeActor: string; reviewActor: string };
 
@@ -253,7 +234,6 @@ export class ForgejoClient {
     this.branch = branch;
     this.fetch = options.fetch ?? globalThis.fetch.bind(globalThis);
     this.now = options.now ?? (() => new Date());
-    this.randomBytes = options.randomBytes ?? ((length) => crypto.getRandomValues(new Uint8Array(length)));
     this.timeoutMs = options.timeoutMs ?? 15_000;
   }
 
@@ -527,6 +507,32 @@ export class ForgejoClient {
     }
   }
 
+  async revokeImplementationContributorBranch(
+    owner: string,
+    repository: string,
+    branch: string,
+    contributor: string,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    const path = this.projectPath(owner, repository, 'branch_protections', encodeURIComponent(branch));
+    let current: BranchProtection;
+    try {
+      current = await this.request<BranchProtection>('GET', path, undefined, signal);
+    } catch (error) {
+      if (isUpstreamStatus(error, 'Forgejo', 404)) return;
+      throw error;
+    }
+    if (!current.push_whitelist_usernames?.includes(contributor)) return;
+    await this.request('PATCH', path, {
+      enable_push: true,
+      enable_push_whitelist: true,
+      push_whitelist_usernames: current.push_whitelist_usernames.filter((username) => username !== contributor),
+      push_whitelist_teams: current.push_whitelist_teams ?? [],
+      push_whitelist_deploy_keys: current.push_whitelist_deploy_keys ?? false,
+      apply_to_admins: true,
+    }, signal, false);
+  }
+
   authenticatedUser(signal?: AbortSignal): Promise<{ login: string }> {
     return this.request<unknown>('GET', '/api/v1/user', undefined, signal)
       .then((value) => parseUpstream(authenticatedUserSchema, value, 'authenticated user'));
@@ -560,7 +566,6 @@ export class ForgejoClient {
     const scoped = new ForgejoClient(this.baseUrl, this.token, owner, repository, this.branch, {
       fetch: this.fetch,
       now: this.now,
-      randomBytes: this.randomBytes,
       timeoutMs: this.timeoutMs,
     });
     if (this.branchProtectionActors) scoped.branchProtectionActors = this.branchProtectionActors;
@@ -582,19 +587,22 @@ export class ForgejoClient {
     const factoryChecks = ["factory/specification", "factory/verification"];
     const preservedStatusChecks = [...new Set(existing?.status_check_contexts ?? [])];
     const statusChecks = [...new Set([...preservedStatusChecks, ...factoryChecks])];
+    if (existing) assertCompatibleMainProtection(existing, actors);
     const body = {
       enable_push: true,
       enable_push_whitelist: true,
-      push_whitelist_usernames: [actors.mergeActor],
-      push_whitelist_teams: [],
-      push_whitelist_deploy_keys: false,
+      push_whitelist_usernames: existing?.push_whitelist_usernames ?? [actors.mergeActor],
+      push_whitelist_teams: existing?.push_whitelist_teams ?? [],
+      push_whitelist_deploy_keys: existing?.push_whitelist_deploy_keys ?? false,
       enable_merge_whitelist: true,
-      merge_whitelist_usernames: [actors.mergeActor],
+      merge_whitelist_usernames: existing?.merge_whitelist_usernames ?? [actors.mergeActor],
+      merge_whitelist_teams: existing?.merge_whitelist_teams ?? [],
       enable_status_check: true,
       status_check_contexts: statusChecks,
-      required_approvals: 1,
+      required_approvals: Math.max(1, existing?.required_approvals ?? 0),
       enable_approvals_whitelist: true,
-      approvals_whitelist_username: [actors.reviewActor],
+      approvals_whitelist_username: existing?.approvals_whitelist_username ?? [actors.reviewActor],
+      approvals_whitelist_teams: existing?.approvals_whitelist_teams ?? [],
       block_on_rejected_reviews: true,
       dismiss_stale_approvals: true,
       block_on_outdated_branch: true,
@@ -671,8 +679,8 @@ export class ForgejoClient {
     await this.removeBranchProtection(owner, repository, rule, signal);
   }
 
-  private async mainBranchProtection(owner: string, repository: string, branch: string, signal?: AbortSignal): Promise<{ status_check_contexts?: string[] } | null> {
-    return this.branchProtection(owner, repository, branch, signal) as Promise<{ status_check_contexts?: string[] } | null>;
+  private async mainBranchProtection(owner: string, repository: string, branch: string, signal?: AbortSignal): Promise<BranchProtection | null> {
+    return this.branchProtection(owner, repository, branch, signal) as Promise<BranchProtection | null>;
   }
 
   private async branchProtection(owner: string, repository: string, rule: string, signal?: AbortSignal): Promise<Record<string, unknown> | null> {
@@ -685,7 +693,7 @@ export class ForgejoClient {
   }
 
   async ensureImplementationBranchProtection(owner: string, repository: string, implementationUser: string, signal?: AbortSignal): Promise<void> {
-    await this.ensureImplementationPushRule(owner, repository, 'factory/requirement-*', [implementationUser], signal);
+    await this.ensureImplementationPushRule(owner, repository, 'factory/requirement-*', [implementationUser], signal, true);
   }
 
   async ensureImplementationContributorAccess(
@@ -740,11 +748,6 @@ export class ForgejoClient {
       && protection.rule_name !== branch
       && protection.push_whitelist_usernames?.includes(contributor));
     if (!stillActive) await this.ensureCollaborator(owner, repository, contributor, 'read', signal);
-    try {
-      await this.request('DELETE', path, undefined, signal, false);
-    } catch (error) {
-      if (!isUpstreamStatus(error, 'Forgejo', 404)) throw error;
-    }
   }
 
   private async ensureImplementationPushRule(
@@ -753,9 +756,10 @@ export class ForgejoClient {
     rule: string,
     usernames: string[],
     signal?: AbortSignal,
+    preserveExistingUsers = false,
   ): Promise<void> {
     const path = this.projectPath(owner, repository, 'branch_protections', encodeURIComponent(rule));
-    const body = {
+    const createBody = {
       enable_push: true,
       enable_push_whitelist: true,
       push_whitelist_usernames: usernames,
@@ -776,11 +780,18 @@ export class ForgejoClient {
       apply_to_admins: true,
     };
     try {
-      await this.request('GET', path, undefined, signal, false);
-      await this.request('PATCH', path, body, signal, false);
+      const existing = await this.request<BranchProtection>('GET', path, undefined, signal);
+      await this.request('PATCH', path, {
+        enable_push: true,
+        enable_push_whitelist: true,
+        push_whitelist_usernames: [...new Set([...(preserveExistingUsers ? existing.push_whitelist_usernames ?? [] : []), ...usernames])],
+        push_whitelist_teams: existing.push_whitelist_teams ?? [],
+        push_whitelist_deploy_keys: existing.push_whitelist_deploy_keys ?? false,
+        apply_to_admins: true,
+      }, signal, false);
     } catch (error) {
       if (!isUpstreamStatus(error, 'Forgejo', 404)) throw error;
-      await this.request('POST', this.projectPath(owner, repository, 'branch_protections'), { rule_name: rule, ...body }, signal, false);
+      await this.request('POST', this.projectPath(owner, repository, 'branch_protections'), { rule_name: rule, ...createBody }, signal, false);
     }
   }
 
@@ -928,6 +939,15 @@ export class ForgejoClient {
     return response.commit.id;
   }
 
+  getProjectCommit(owner: string, repository: string, sha: string, signal?: AbortSignal): Promise<RepositoryCommit> {
+    return this.request<RepositoryCommit>(
+      'GET',
+      `${this.projectPath(owner, repository, 'git', 'commits', encodeURIComponent(sha))}?stat=false&verification=false&files=false`,
+      undefined,
+      signal,
+    );
+  }
+
   synchronizeProjectBranch(input: {
     owner: string;
     repository: string;
@@ -943,12 +963,7 @@ export class ForgejoClient {
   }
 
   listCommitStatuses(owner: string, repository: string, sha: string, signal?: AbortSignal): Promise<CommitStatus[]> {
-    return this.request<CommitStatus[]>(
-      "GET",
-      `${this.projectPath(owner, repository, "statuses", encodeURIComponent(sha))}?limit=100`,
-      undefined,
-      signal,
-    );
+    return this.paginated<CommitStatus>(this.projectPath(owner, repository, "statuses", encodeURIComponent(sha)), signal);
   }
 
   createCommitStatus(
@@ -970,12 +985,7 @@ export class ForgejoClient {
   }
 
   listPullReviews(owner: string, repository: string, number: number, signal?: AbortSignal): Promise<PullReview[]> {
-    return this.request<PullReview[]>(
-      "GET",
-      `${this.projectPath(owner, repository, "pulls", String(number), "reviews")}?limit=100`,
-      undefined,
-      signal,
-    );
+    return this.paginated<PullReview>(this.projectPath(owner, repository, "pulls", String(number), "reviews"), signal);
   }
 
   async createPullReview(
@@ -1059,6 +1069,11 @@ export class ForgejoClient {
     }
     if (!title.trim()) title = issue.title;
     if (body === "") body = visibleIssueBody(issue.body);
+    const current = toCard(issue);
+    if ((current.acceptance || current.status === 'implementation' || current.status === 'done')
+      && (title !== issue.title || visibleIssueBody(body) !== current.body)) {
+      throw workflowError('accepted requirements cannot be edited');
+    }
     const selectedAssignee = assignee === undefined ? findAssignee(issue.body) : assignee?.trim() || null;
     const updatedBody = visibleIssueBody(body).trim() + teamMarkerFragment(issue.body) + applicationMarker(applicationIds) + factoryAssigneeMarker(selectedAssignee) + interviewMarkerFragment(issue.body)
       + proposalMarkerFragment(issue.body) + acceptedMarkerFragment(issue.body);
@@ -1308,7 +1323,7 @@ export class ForgejoClient {
   }
 
   async ensureLabels(signal?: AbortSignal): Promise<Map<string, Label>> {
-    const existing = await this.request<Label[]>("GET", `${this.repoPath("labels")}?limit=100`, undefined, signal);
+    const existing = await this.paginated<Label>(this.repoPath("labels"), signal);
     const result = new Map(existing.map((label) => [label.name, label]));
     for (const wanted of wantedLabels) {
       if (result.has(wanted.name)) continue;
@@ -1333,8 +1348,8 @@ export class ForgejoClient {
     });
   }
 
-  beginInterview(number: number, actor: string, retake: boolean, binding: { runId: string; chatId: string; teamId: string; repository: string; proposalNonce: string }, pending: InterviewQuestion, signal?: AbortSignal): Promise<InterviewState> {
-    return beginInterview(this, number, actor, retake, binding, pending, signal);
+  beginInterview(number: number, actor: string, retake: boolean, binding: { runId: string; chatId: string; teamId: string; repository: string; proposalNonce: string }, pending: InterviewQuestion, expectedVersion: number, signal?: AbortSignal): Promise<InterviewState> {
+    return beginInterview(this, number, actor, retake, binding, pending, expectedVersion, signal);
   }
 
   prepareInterviewAnswer(number: number, actor: string, answer: InterviewAnswer, payload: string, operationId: string, signal?: AbortSignal): Promise<InterviewState> {
@@ -1353,16 +1368,12 @@ export class ForgejoClient {
     return completeInterviewAnswer(this, number, operationId, next, done, signal);
   }
 
-  recordInterviewRefinement(number: number, actor: string, note: string, next: InterviewQuestion | null, signal?: AbortSignal): Promise<InterviewState> {
-    return recordInterviewRefinement(this, number, actor, note, next, signal);
+  recordInterviewRefinement(number: number, actor: string, note: string, next: InterviewQuestion | null, expectedVersion: number, signal?: AbortSignal): Promise<InterviewState> {
+    return recordInterviewRefinement(this, number, actor, note, next, expectedVersion, signal);
   }
 
   events(number: number, signal?: AbortSignal): Promise<CardEvent[]> {
     return events(this, number, signal);
-  }
-
-  newRequirementId(): string {
-    return `req_${bytesToHex(this.randomBytes(16))}`;
   }
 
   async updateIssueBody(number: number, body: string, signal?: AbortSignal): Promise<void> {
@@ -1419,6 +1430,20 @@ export class ForgejoClient {
     return await response.json() as T;
   }
 
+  private async paginated<T>(path: string, signal?: AbortSignal): Promise<T[]> {
+    const limit = 50;
+    const all: T[] = [];
+    for (let page = 1; ; page += 1) {
+      const separator = path.includes('?') ? '&' : '?';
+      const response = await this.response('GET', `${path}${separator}limit=${limit}&page=${page}`, undefined, signal);
+      const values = await response.json() as T[];
+      all.push(...values);
+      const total = totalCount(response.headers.get('x-total-count'));
+      const link = response.headers.get('link');
+      if (total !== null ? all.length >= total : link !== null ? !hasNextLink(link) : values.length < limit) return all;
+    }
+  }
+
   private async response(method: string, endpoint: string, body?: unknown, signal?: AbortSignal): Promise<Response> {
     const headers = new Headers({ Accept: "application/json", Authorization: `token ${this.token}` });
     const init: RequestInit = { method, headers };
@@ -1438,8 +1463,6 @@ export class ForgejoClient {
     return response;
   }
 }
-
-export { ForgejoClient as Client };
 
 function isFactoryImplementationProtection(protection: Record<string, unknown>, implementationUser: string): boolean {
   const signature: Record<string, unknown> = {
@@ -1468,6 +1491,19 @@ function isFactoryImplementationProtection(protection: Record<string, unknown>, 
       ? Array.isArray(actual) && actual.length === expected.length && expected.every((value) => actual.includes(value))
       : actual === expected;
   });
+}
+
+function assertCompatibleMainProtection(protection: BranchProtection, actors: { mergeActor: string; reviewActor: string }): void {
+  const pushUsers = protection.push_whitelist_usernames ?? [];
+  const mergeUsers = protection.merge_whitelist_usernames ?? [];
+  const approvalUsers = protection.approvals_whitelist_username ?? [];
+  if (protection.enable_push_whitelist === false || protection.enable_merge_whitelist === false
+    || protection.enable_approvals_whitelist === false
+    || (protection.push_whitelist_usernames !== undefined && !pushUsers.includes(actors.mergeActor))
+    || (protection.merge_whitelist_usernames !== undefined && !mergeUsers.includes(actors.mergeActor))
+    || (protection.approvals_whitelist_username !== undefined && !approvalUsers.includes(actors.reviewActor))) {
+    throw workflowError('existing main branch protection is incompatible with Factory actors');
+  }
 }
 
 function isLeastPrivilegeReadTeam(team: Team): boolean {
@@ -1513,10 +1549,6 @@ function parseUpstream<T>(schema: z.ZodType<T>, value: unknown, contract: string
   throw new Error(`Forgejo ${contract} API is incompatible: ${issue?.path.join('.') || 'response'} ${issue?.message || 'is invalid'}`);
 }
 
-export function New(baseUrl: string, token: string, owner: string, repository: string, branch: string, options: ClientOptions = {}): ForgejoClient {
-  return new ForgejoClient(baseUrl, token, owner, repository, branch, options);
-}
-
 function boardPage(cursor?: string): number {
   if (cursor === undefined) return 1;
   if (!/^[1-9]\d*$/.test(cursor)) throw new ApplicationError('bad_request', 400, 'invalid board cursor');
@@ -1529,6 +1561,10 @@ function totalCount(value: string | null): number | null {
   if (value === null || !/^\d+$/.test(value)) return null;
   const total = Number(value);
   return Number.isSafeInteger(total) ? total : null;
+}
+
+function hasNextLink(value: string): boolean {
+  return value.split(',').some((part) => /;\s*rel="?next"?\s*$/.test(part.trim()));
 }
 
 export function validateSpecification(specification: RequirementSpec): void {
@@ -1897,22 +1933,6 @@ function encodeSnapshotYaml(snapshot: Snapshot): Uint8Array {
     ...yamlList("    non_goals", specification.nonGoals),
   ];
   return new TextEncoder().encode(`${lines.join("\n")}\n`);
-}
-
-export function removeAcceptedMarker(body: string): string {
-  const marker = "\n\n---\nCurrent accepted requirement: `";
-  const index = body.lastIndexOf(marker);
-  return index >= 0 ? body.slice(0, index) : body;
-}
-
-export function removeProposalMarker(body: string): string {
-  const index = body.lastIndexOf(`\n\n${proposalMarker}`);
-  return index >= 0 ? body.slice(0, index) : body;
-}
-
-export function removeApplicationMarker(body: string): string {
-  const index = body.lastIndexOf(`\n\n${applicationsMarker}`);
-  return index >= 0 ? body.slice(0, index) : body;
 }
 
 function yamlList(key: string, values: string[]): string[] {

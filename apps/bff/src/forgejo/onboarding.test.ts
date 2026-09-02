@@ -129,6 +129,43 @@ describe('Forgejo application onboarding API', () => {
     expect(diff).toEqual({ created: false, addedStatusChecks: ['factory/specification', 'factory/verification'], preservedStatusChecks: ['ci/test', 'security/scan'] });
   });
 
+  test('preserves compatible approval and whitelist policy fields', async () => {
+    let patched: Record<string, unknown> | undefined;
+    const existing = {
+      status_check_contexts: ['ci/test'], required_approvals: 3,
+      enable_push_whitelist: true, push_whitelist_usernames: ['merge', 'operator'], push_whitelist_teams: ['release'], push_whitelist_deploy_keys: true,
+      enable_merge_whitelist: true, merge_whitelist_usernames: ['merge', 'operator'], merge_whitelist_teams: ['release'],
+      enable_approvals_whitelist: true, approvals_whitelist_username: ['review', 'security'], approvals_whitelist_teams: ['security'],
+    };
+    const client = new ForgejoClient('https://forgejo.example', 'secret', 'factory', 'requirements', 'main', { fetch: async (_input, init = {}) => {
+      if ((init.method ?? 'GET') === 'GET') return Response.json(existing);
+      patched = JSON.parse(String(init.body));
+      return Response.json(patched);
+    } });
+
+    await client.ensureMainBranchProtection('factory', 'app', 'main', { mergeActor: 'merge', reviewActor: 'review' });
+
+    expect(patched).toMatchObject({
+      required_approvals: 3,
+      push_whitelist_usernames: ['merge', 'operator'], push_whitelist_teams: ['release'], push_whitelist_deploy_keys: true,
+      merge_whitelist_usernames: ['merge', 'operator'], merge_whitelist_teams: ['release'],
+      approvals_whitelist_username: ['review', 'security'], approvals_whitelist_teams: ['security'],
+      dismiss_stale_approvals: true,
+    });
+  });
+
+  test('rejects an incompatible existing main branch policy instead of weakening it', async () => {
+    let patches = 0;
+    const client = new ForgejoClient('https://forgejo.example', 'secret', 'factory', 'requirements', 'main', { fetch: async (_input, init = {}) => {
+      if ((init.method ?? 'GET') === 'PATCH') patches += 1;
+      return Response.json({ enable_approvals_whitelist: true, approvals_whitelist_username: ['security'] });
+    } });
+
+    await expect(client.ensureMainBranchProtection('factory', 'app', 'main', { mergeActor: 'merge', reviewActor: 'review' }))
+      .rejects.toThrow('incompatible with Factory actors');
+    expect(patches).toBe(0);
+  });
+
   test('fails startup verification when a token belongs to the wrong actor', async () => {
     const client = new ForgejoClient('https://forgejo.example', 'wrong-token', 'factory', 'requirements', 'main', {
       fetch: async () => Response.json({ login: 'factory-admin' }),
@@ -141,9 +178,9 @@ describe('Forgejo application onboarding API', () => {
 
   test('delegates only pull review operations to the review token client', async () => {
     const authorizations: string[] = [];
-    const fetch = async (_input: RequestInfo | URL, init: RequestInit = {}) => {
+    const fetch = async (input: RequestInfo | URL, init: RequestInit = {}) => {
       authorizations.push(new Headers(init.headers).get('Authorization') ?? '');
-      return Response.json({ login: 'actor' });
+      return input.toString().includes('/reviews') ? Response.json([]) : Response.json({ login: 'actor' });
     };
     const integration = new ForgejoClient('https://forgejo.example', 'admin-token', 'factory', 'requirements', 'main', { fetch });
     const review = new ForgejoClient('https://forgejo.example', 'review-token', 'factory', 'requirements', 'main', { fetch });
@@ -248,6 +285,29 @@ describe('Forgejo application onboarding API', () => {
     expect(requests.some((request) => request.path.includes('requirement-*'))).toBe(false);
   });
 
+  test('changes only push access on a pre-existing exact branch policy', async () => {
+    let patched: Record<string, unknown> | undefined;
+    const existing = {
+      push_whitelist_usernames: ['factory-implementation'], push_whitelist_teams: ['operators'], push_whitelist_deploy_keys: true,
+      required_approvals: 2, enable_approvals_whitelist: true, approvals_whitelist_username: ['security'], dismiss_stale_approvals: true,
+    };
+    const client = new ForgejoClient('https://forgejo.example', 'secret', 'factory', 'requirements', 'main', { fetch: async (input, init = {}) => {
+      const url = new URL(input.toString());
+      if (init.method === 'PUT') return new Response(null, { status: 204 });
+      if ((init.method ?? 'GET') === 'GET' && url.pathname.includes('/branch_protections/')) return Response.json(existing);
+      if (init.method === 'PATCH') { patched = JSON.parse(String(init.body)); return Response.json(patched); }
+      return new Response(null, { status: 404 });
+    } });
+
+    await client.ensureImplementationContributorAccess('factory', 'app', 'factory/requirement-7', 'factory-implementation', 'alice');
+
+    expect(patched as Record<string, unknown> | null).toEqual({
+      enable_push: true, enable_push_whitelist: true,
+      push_whitelist_usernames: ['factory-implementation', 'alice'], push_whitelist_teams: ['operators'], push_whitelist_deploy_keys: true,
+      apply_to_admins: true,
+    });
+  });
+
   test('removes completed branch access and downgrades an inactive contributor to read', async () => {
     const requests: Array<{ method: string; path: string; body: Record<string, unknown> | null }> = [];
     const client = new ForgejoClient('https://forgejo.example', 'secret', 'factory', 'requirements', 'main', {
@@ -272,7 +332,7 @@ describe('Forgejo application onboarding API', () => {
 
     expect(requests.find((request) => request.method === 'PATCH')?.body).toMatchObject({ push_whitelist_usernames: ['factory-implementation'] });
     expect(requests.find((request) => request.method === 'PUT')?.body).toEqual({ permission: 'read' });
-    expect(requests.some((request) => request.method === 'DELETE' && request.path.includes('/branch_protections/'))).toBe(true);
+    expect(requests.some((request) => request.method === 'DELETE' && request.path.includes('/branch_protections/'))).toBe(false);
   });
 
   test('keeps repository write while another exact delivery branch remains active', async () => {
@@ -294,6 +354,28 @@ describe('Forgejo application onboarding API', () => {
     await client.releaseImplementationContributorAccess('factory', 'app', 'factory/requirement-7-fixed', 'factory-implementation', 'alice');
 
     expect(collaboratorUpdates).toEqual([]);
+  });
+
+  test('removes a deprovisioned contributor from an exact branch whitelist', async () => {
+    let patched: Record<string, unknown> | null = null;
+    const client = new ForgejoClient('https://forgejo.example', 'secret', 'factory', 'requirements', 'main', {
+      fetch: async (_input, init = {}) => {
+        if ((init.method ?? 'GET') === 'GET') return Response.json({
+          push_whitelist_usernames: ['factory-implementation', 'alice', 'operator'],
+          push_whitelist_teams: ['operators'], push_whitelist_deploy_keys: true,
+        });
+        patched = JSON.parse(String(init.body));
+        return new Response(null, { status: 204 });
+      },
+    });
+
+    await client.revokeImplementationContributorBranch('factory', 'app', 'factory/requirement-7-fixed', 'alice');
+
+    expect(patched as unknown).toEqual({
+      enable_push: true, enable_push_whitelist: true,
+      push_whitelist_usernames: ['factory-implementation', 'operator'],
+      push_whitelist_teams: ['operators'], push_whitelist_deploy_keys: true, apply_to_admins: true,
+    });
   });
 
   test('verifies a pre-existing branch still points at its requested origin after create returns 409', async () => {

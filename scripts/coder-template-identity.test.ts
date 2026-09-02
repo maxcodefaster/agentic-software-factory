@@ -33,6 +33,7 @@ test("Coder template identity uses resolved version-backed defaults", async () =
   const baseline = await identity(versions);
   expect(await identity(versions.replace("env-one", "env-two"))).not.toBe(baseline);
   expect(await identity(versions.replace("coder-one", "coder-two"))).not.toBe(baseline);
+  expect(await identity(versions, { FACTORY_CODER_RESTRICTED_APP_SHARING: "owner" })).not.toBe(baseline);
 
   const override = { FACTORY_ENVBUILDER_IMAGE: "registry.example/envbuilder:fixed" };
   expect(await identity(versions, override)).toBe(await identity(versions.replace("env-one", "env-two"), override));

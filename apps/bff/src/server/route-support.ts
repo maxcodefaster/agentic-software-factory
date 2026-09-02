@@ -91,6 +91,16 @@ export async function applicationIdsBelongToTeam(ids: readonly string[], team: s
   return registrations.every((registration) => registration?.team === team);
 }
 
+export function persistedApplicationId(
+  value: string,
+  applications: ReadonlyArray<{ id: string }>,
+): string | null {
+  if (applications.some((application) => application.id === value)) return value;
+  return applications.length === 1 && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+    ? applications[0]!.id
+    : null;
+}
+
 export async function repositoryScope(
   request: Request,
   identity: Identity,
@@ -259,10 +269,6 @@ export async function requireImplementationRunAccess(id: string, request: Reques
     teams: teams.map((team) => team.slug),
     repository: { owner: application.repositoryOwner, name: application.repositoryName, systemId: run.systemId },
   });
-}
-
-export function legacyApplicationId(value: string): boolean {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
 export function isPublicStaticPath(pathname: string): boolean {

@@ -4,7 +4,15 @@
  * All software distributed under the RPL is provided strictly on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED, AND LICENSOR HEREBY DISCLAIMS ALL SUCH WARRANTIES, INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT, OR NON-INFRINGEMENT. See the RPL for specific language governing rights and limitations under the RPL.
  */
 
-import type { ForgejoClient, Issue, RequirementSpec } from "./client";
+import type {
+  InterviewAnswer,
+  InterviewQuestion,
+  InterviewResponse,
+  InterviewState,
+  PendingInterviewOperation,
+  RequirementSpec,
+} from '@agentic-software-factory/api-contracts/kanban';
+import type { ForgejoClient, Issue } from "./client";
 import {
   acceptedMarkerFragment,
   assigneeMarkerFragment,
@@ -18,77 +26,8 @@ import {
 } from "./client";
 import { ApplicationError } from '../errors';
 
-export interface InterviewOption {
-  value: string;
-  label: string;
-  description: string | null;
-}
-
-export interface InterviewQuestion {
-  id: string;
-  header: string | null;
-  prompt: string;
-  type: 'single' | 'multi' | 'text';
-  options: InterviewOption[];
-  allowCustom: boolean;
-  hint: string | null;
-}
-
-export interface InterviewAnswer {
-  questionId: string;
-  expectedVersion: number;
-  selected: string[];
-  customText: string;
-}
-
-export interface InterviewTurn {
-  question: InterviewQuestion;
-  answer: InterviewAnswer;
-  answeredAt: string;
-  answeredBy: string;
-}
-
-export interface PendingInterviewOperation {
-  operationId: string;
-  answer: InterviewAnswer;
-  payload: string;
-  previousQuestionId: string;
-  expectedVersion: number;
-  phase: 'answer' | 'proposal';
-  createdAt: string;
-  createdBy: string;
-  failure?: InterviewOperationFailure;
-}
-
-export interface InterviewOperationFailure {
-  message: string;
-  retryable: boolean;
-  failedAt: string;
-}
-
-export interface InterviewState {
-  version: number;
-  runId: string;
-  chatId: string | null;
-  teamId?: string;
-  repository?: string;
-  requirementNumber?: number;
-  proposalNonce?: string;
-  turns: InterviewTurn[];
-  pending: InterviewQuestion | null;
-  pendingOperation: PendingInterviewOperation | null;
-  done: boolean;
-  startedAt: string;
-  startedBy: string;
-  finishedAt?: string;
-  finishedBy?: string;
-  retakes: number;
-}
-
-export interface InterviewResponse {
-  state: InterviewState;
-  spec: RequirementSpec | null;
-}
+export type { InterviewAnswer, InterviewQuestion, InterviewResponse, InterviewState };
+type InterviewOperationFailure = NonNullable<PendingInterviewOperation['failure']>;
 
 export const interviewMarker = "<!-- agentic-software-factory-interview:";
 
@@ -119,12 +58,14 @@ export async function beginInterview(
   retake: boolean,
   binding: { runId: string; chatId: string; teamId: string; repository: string; proposalNonce: string },
   pending: InterviewQuestion,
+  expectedVersion: number,
   signal?: AbortSignal,
 ): Promise<InterviewState> {
   const issue = await client.getIssue(number, signal);
   let current = emptyInterviewState();
   try { current = findInterview(issue.body); } catch {}
   if (!retake && (current.pending !== null || current.done || current.turns.length > 0)) return current;
+  if (current.version !== expectedVersion) throw workflowError("interview changed; refresh before starting it");
   validateAIQuestion(pending);
   if (!binding.runId.trim() || !binding.chatId.trim() || !binding.teamId.trim() || !binding.repository.trim() || !binding.proposalNonce.trim()) {
     throw workflowError("AI interview binding is incomplete");
@@ -264,6 +205,7 @@ export async function recordInterviewRefinement(
   actor: string,
   note: string,
   next: InterviewQuestion | null,
+  expectedVersion: number,
   signal?: AbortSignal,
 ): Promise<InterviewState> {
   const issue = await client.getIssue(number, signal);
@@ -271,6 +213,7 @@ export async function recordInterviewRefinement(
   try { state = findInterview(issue.body); } catch { throw new Error("finish the interview before refining it"); }
   assertAIInterview(state, number);
   if (!state.done) throw workflowError("finish the AI interview before refining it");
+  if (state.version !== expectedVersion) throw workflowError("interview changed; refresh before refining it");
   assertProposalMatchesRun(findProposal(issue.body), state, number);
   if (!note.trim()) throw new Error("a refinement note is required");
   if (!next) throw workflowError("Coder did not return a valid refinement question");

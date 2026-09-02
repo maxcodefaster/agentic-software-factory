@@ -141,7 +141,6 @@ function services(overrides: Partial<ServerServices> = {}) {
     summary: mock(async () => ({ count: 0, workspaces: [], available: false })),
     developerSummary: mock(async () => ({ count: 0, workspaces: [], available: false })),
     developmentTools: mock(async () => ({ coderIdentity: true, forgejoConnected: true, forgejoUsername: 'developer', connectUrl: 'https://coder.example/external-auth/forgejo' })),
-    systemSummary: mock(async () => ({ count: 0, workspaces: [], available: false })),
     ensureDeveloperWorkspace: mock(async () => ({ id: 'workspace-1', name: 'developer-app', template: 'Agentic Software Factory', status: 'running', healthy: true, lastUsedAt: '2026-08-20T01:00:00Z', url: 'https://coder.example/workspace', apps: [], parameters: { workspace_kind: 'developer' } })),
     developerWorkspaceById: mock(async () => ({ id: 'workspace-1', name: 'developer-app', template: 'Agentic Software Factory', status: 'running', healthy: true, lastUsedAt: '2026-08-20T01:00:00Z', url: 'https://coder.example/workspace', apps: [], parameters: { workspace_kind: 'developer' } })),
     chatCapability: mock(async () => ({ available: false, reason: 'not configured' })),
@@ -283,11 +282,16 @@ describe('Agentic Software Factory Elysia server', () => {
     expect(databaseReadiness.status).toBe(503);
     expect(await databaseReadiness.json()).toEqual({ status: 'not-ready', dependencies: { database: 'not-ready', forgejo: 'ready' } });
 
-    const aiUnavailable = services({ coder: { ...fixture.coder, interviewReadiness: async () => ({ available: false, reason: 'provider down' }) } });
+    const aiUnavailable = services({
+      coder: { ...fixture.coder, interviewReadiness: async () => ({ available: false, reason: 'provider down' }) },
+      auth: { ...fixture.auth, authenticate: mock(async () => ({ ...identity, groups: [...identity.groups!, 'tenant-factory-admin'] })) },
+    });
     const aiReadiness = await createServer(aiUnavailable.value).handle(request('/readyz'));
     expect(aiReadiness.status).toBe(200);
     expect(await aiReadiness.json()).toEqual({ status: 'ready', dependencies: { database: 'ready', forgejo: 'ready' } });
-    const status = await createServer(aiUnavailable.value).handle(request('/statusz'));
+    const status = await createServer(aiUnavailable.value).handle(request('/statusz', {
+      headers: { authorization: 'Bearer valid' },
+    }));
     expect(status.status).toBe(200);
     expect(await status.json()).toEqual({ status: 'ok', capabilities: { aiInterview: 'unavailable', aiInterviewReason: 'provider down' } });
   });
@@ -330,7 +334,11 @@ describe('Agentic Software Factory Elysia server', () => {
         staging: { status: 'failed' as const, phase: 'failed' as const, updatedAt: '2026-09-01T11:59:00.000Z', error: 'workspace failed' },
       }],
     }));
-    const fixture = services({ systemsStatus });
+    const base = services();
+    const fixture = services({
+      systemsStatus,
+      auth: { ...base.auth, authenticate: mock(async () => ({ ...identity, groups: [...identity.groups!, 'tenant-factory-admin'] })) },
+    });
     const app = createServer(fixture.value);
 
     const ready = await app.handle(request('/readyz'));
@@ -347,7 +355,7 @@ describe('Agentic Software Factory Elysia server', () => {
       },
     });
 
-    const status = await app.handle(request('/statusz'));
+    const status = await app.handle(request('/statusz', { headers: { authorization: 'Bearer valid' } }));
     expect(status.status).toBe(200);
     expect(await status.json()).toMatchObject({
       status: 'ok',
@@ -357,6 +365,21 @@ describe('Agentic Software Factory Elysia server', () => {
       },
     });
     expect(systemsStatus).toHaveBeenCalledTimes(2);
+  });
+
+  test('restricts capability status to tenant administrators', async () => {
+    const base = services();
+    const admin = { ...identity, groups: [...identity.groups!, 'tenant-factory-admin'] };
+    const app = createServer(services({
+      auth: {
+        ...base.auth,
+        authenticate: mock(async (incoming) => incoming.headers.get('authorization') === 'Bearer admin' ? admin : incoming.headers.get('authorization') === 'Bearer valid' ? identity : null),
+      },
+    }).value);
+
+    expect((await app.handle(request('/statusz'))).status).toBe(401);
+    expect((await app.handle(request('/statusz', { headers: { authorization: 'Bearer valid' } }))).status).toBe(403);
+    expect((await app.handle(request('/statusz', { headers: { authorization: 'Bearer admin' } }))).status).toBe(200);
   });
 
   test('returns not-ready when persisted state has registered Systems but none are usable', async () => {
@@ -405,19 +428,15 @@ describe('Agentic Software Factory Elysia server', () => {
     expect(fixture.forgejo.createRequirement).toHaveBeenCalledTimes(1);
   });
 
-  test('redirects login compatibility aliases while preserving the raw query', async () => {
+  test('exposes only the current logout route', async () => {
     const fixture = services();
     const app = createServer(fixture.value);
-    for (const path of ['/auth/login', '/api/auth/login']) {
-      const response = await app.handle(request(`${path}?return_to=%2Fboard%3Fteam%3Dcore&scope=openid+email&scope=groups`));
-      expect(response.status).toBe(302);
-      expect(response.headers.get('location')).toBe('https://factory.example/login?return_to=%2Fboard%3Fteam%3Dcore&scope=openid+email&scope=groups');
-    }
+    for (const path of ['/auth/login', '/api/auth/login']) expect((await app.handle(request(path))).status).toBe(404);
+    expect((await app.handle(request('/api/auth/logout', { method: 'POST' }))).status).toBe(404);
     expect((await app.handle(request('/auth/exchange', { method: 'POST' }))).status).toBe(404);
     expect((await app.handle(request('/api/auth/exchange', { method: 'POST' }))).status).toBe(404);
     expect((await app.handle(request('/api/v1/me', { headers: { authorization: 'Bearer valid' } }))).status).toBe(404);
     expect((await app.handle(request('/api/v1/developer-context', { headers: { authorization: 'Bearer valid' } }))).status).toBe(404);
-    expect((await app.handle(request('/auth/login', { method: 'POST' }))).status).toBe(404);
     expect((await app.handle(request('/auth/logout'))).status).toBe(404);
     expect((await app.handle(request('/auth/logout', { method: 'POST' }))).status).toBe(200);
     expect(fixture.auth.handle).toHaveBeenCalledTimes(1);
@@ -584,6 +603,52 @@ describe('Agentic Software Factory Elysia server', () => {
     expect(denied.status).toBe(404);
   });
 
+  test('allows only tenant administrators to deprovision another tenant user', async () => {
+    const base = services();
+    const deprovisionUser = mock(async (id: string) => ({
+      id, status: 'deprovisioned' as const, persisted: true as const,
+      coder: { status: 'suspended' as const, revokedTokenCount: 2 },
+      forgejo: { status: 'requested' as const, immediate: true },
+    }));
+    const app = createServer(services({
+      deprovisionUser,
+      auth: { ...base.auth, authenticate: mock(async (incoming) => incoming.headers.get('authorization') === 'Bearer valid'
+        ? { ...identity, groups: [...identity.groups!, 'tenant-factory-admin'] }
+        : null) },
+    }).value);
+
+    const response = await app.handle(request('/api/v1/users/bob-id/deprovision', { method: 'POST', headers: { authorization: 'Bearer valid' } }));
+    expect(response.status).toBe(202);
+    expect(await response.json()).toEqual({
+      id: 'bob-id', status: 'deprovisioned', persisted: true,
+      coder: { status: 'suspended', revokedTokenCount: 2 },
+      forgejo: { status: 'requested', immediate: true },
+    });
+    expect(deprovisionUser).toHaveBeenCalledWith('bob-id');
+
+    const nonAdmin = await createServer(services({ deprovisionUser }).value).handle(request('/api/v1/users/bob-id/deprovision', {
+      method: 'POST', headers: { authorization: 'Bearer valid' },
+    }));
+    expect(nonAdmin.status).toBe(403);
+    const unauthenticated = await app.handle(request('/api/v1/users/bob-id/deprovision', { method: 'POST' }));
+    expect(unauthenticated.status).toBe(401);
+  });
+
+  test('rejects self-deprovision and invalid or foreign user IDs without changing authority', async () => {
+    const base = services();
+    const deprovisionUser = mock(async () => null);
+    const app = createServer(services({
+      deprovisionUser,
+      auth: { ...base.auth, authenticate: mock(async () => ({ ...identity, groups: [...identity.groups!, 'tenant-factory-admin'] })) },
+    }).value);
+    const headers = { authorization: 'Bearer valid' };
+
+    expect((await app.handle(request('/api/v1/users/alice-id/deprovision', { method: 'POST', headers }))).status).toBe(409);
+    expect((await app.handle(request('/api/v1/users/%20/deprovision', { method: 'POST', headers }))).status).toBe(400);
+    expect((await app.handle(request('/api/v1/users/foreign-id/deprovision', { method: 'POST', headers }))).status).toBe(404);
+    expect(deprovisionUser).toHaveBeenCalledTimes(1);
+  });
+
   test('allows developers and admins to onboard Systems while denying business users', async () => {
     const applicationOnboarding = {
       availableRepositories: mock(async () => [{ name: 'new-app', fullName: 'factory/new-app', description: '', defaultBranch: 'main', repositoryUrl: 'https://git/new-app' }]),
@@ -686,8 +751,11 @@ describe('Agentic Software Factory Elysia server', () => {
     const review = {
       ...developer, id: 'workspace-2', name: 'verification-app', parameters: { workspace_kind: 'verification', workspace_namespace: 'factory-workspaces' },
     };
+    const staging = {
+      ...developer, id: 'workspace-3', name: 'staging-app', parameters: { workspace_kind: 'staging', workspace_namespace: 'factory-workspaces' },
+    };
     const fixture = services({
-      coder: { ...services().value.coder, summary: mock(async () => ({ count: 2, workspaces: [developer, review], available: true })) },
+      coder: { ...services().value.coder, summary: mock(async () => ({ count: 3, workspaces: [developer, review, staging], available: true })) },
     });
 
     const response = await createServer(fixture.value).handle(request('/api/v1/governance', { headers: { authorization: 'Bearer valid' } }));
@@ -698,6 +766,7 @@ describe('Agentic Software Factory Elysia server', () => {
       { ...developer, parameters: undefined, kind: 'developer' },
       { ...review, parameters: undefined, kind: 'verification' },
     ].map(({ parameters: _parameters, apps: _apps, ...workspace }) => workspace));
+    expect(body.workspaces.count).toBe(2);
   });
 
   test('creates developer workspaces through Factory', async () => {
@@ -791,6 +860,25 @@ describe('Agentic Software Factory Elysia server', () => {
     expect(fixture.forgejo.closeRequirement).not.toHaveBeenCalled();
   });
 
+  test.each(['implementation', 'done'] as const)('rejects API visible edits after a requirement reaches %s', async (status) => {
+    const base = services();
+    const updateRequirement = mock(async () => { throw new Error('must not edit'); });
+    const fixture = services({
+      forgejo: {
+        ...base.forgejo,
+        getIssue: mock(async () => ({ title: 'Accepted', body: 'Accepted body', status, team: 'factory', applications: [{ id: application.id, name: application.name }] })),
+        updateRequirement,
+      },
+    });
+    const response = await createServer(fixture.value).handle(request(`/api/v1/requirements/2?application=${encodeURIComponent(application.id)}`, {
+      method: 'PATCH', headers: { authorization: 'Bearer valid', 'content-type': 'application/json' }, body: JSON.stringify({ body: 'Changed' }),
+    }));
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ error: 'accepted requirements cannot be edited' });
+    expect(updateRequirement).not.toHaveBeenCalled();
+  });
+
   test('projects explicit persona capabilities and keeps tenant-only membership read-only', async () => {
     const base = services();
     const tenantIdentity = { ...identity, groups: ['tenant-factory'] };
@@ -835,7 +923,7 @@ describe('Agentic Software Factory Elysia server', () => {
     const app = createServer(fixture.value);
     const headers = { authorization: 'Bearer valid' };
 
-    expect(await (await app.handle(request('/api/v1/teams', { headers }))).json()).toEqual({ teams: teams.slice(0, 2).map(({ slug, displayName }) => ({ slug, displayName })) });
+    expect((await app.handle(request('/api/v1/teams', { headers }))).status).toBe(404);
     expect(await (await app.handle(request('/api/v1/session', { headers }))).json()).toMatchObject({ teams: ['factory', 'payments'] });
   });
 
@@ -903,6 +991,21 @@ describe('Agentic Software Factory Elysia server', () => {
       headers: { authorization: 'Bearer valid' },
     }));
     expect(crossTeam.status).toBe(404);
+  });
+
+  test('maps a persisted singleton UUID card application to the sole current System', async () => {
+    const base = services();
+    const persistedId = '1c71f7e5-ef9e-40bd-93c9-9edaa53c5520';
+    const selectedBoard = { ...board, columns: { ...board.columns, requirements: [{ ...board.columns.requirements[0]!, applications: [{ id: persistedId, name: persistedId }] }] } };
+    const fixture = services({
+      forgejo: { ...base.forgejo, board: mock(async () => selectedBoard) },
+      applications: { list: mock(async () => [application]), get: mock(async () => application) },
+    });
+
+    const response = await createServer(fixture.value).handle(request(`/api/v1/board?application=${encodeURIComponent(application.id)}`, { headers: { authorization: 'Bearer valid' } }));
+
+    expect(response.status).toBe(200);
+    expect((await response.json() as any).columns.requirements[0].applications).toEqual([{ id: application.id, name: application.name }]);
   });
 
   test('forwards board cursors and returns explicit page metadata', async () => {
@@ -2100,8 +2203,8 @@ describe('Agentic Software Factory Elysia server', () => {
     expect((await authApp.handle(request('/login'))).status).toBe(404);
     expect((await authApp.handle(request('/auth/config'))).status).toBe(200);
     expect((await authApp.handle(request('/auth/config'))).status).toBe(200);
-    expect((await authApp.handle(request('/auth/login'))).status).toBe(302);
-    const authLimited = await authApp.handle(request('/auth/login'));
+    expect((await authApp.handle(request('/sign-in/email', { method: 'POST' }))).status).not.toBe(429);
+    const authLimited = await authApp.handle(request('/sign-in/email', { method: 'POST' }));
     expect(authLimited.status).toBe(429);
     expect(Number(authLimited.headers.get('retry-after'))).toBeGreaterThan(0);
 
@@ -2126,7 +2229,7 @@ describe('Agentic Software Factory Elysia server', () => {
     const boundary = createHttpBoundary(services({ rateLimits: { auth: 1 } }).value);
     const server = { requestIP: () => ({ address: '203.0.113.5' }) };
     const invoke = (address: string) => boundary.onRequest({
-      request: request('/auth/login', { headers: { 'x-real-ip': address } }),
+      request: request('/sign-in/email', { method: 'POST', headers: { 'x-real-ip': address } }),
       set: { headers: {} },
       server,
     });
@@ -2142,7 +2245,7 @@ describe('Agentic Software Factory Elysia server', () => {
     }).value);
     const server = { requestIP: () => ({ address: '10.1.2.3' }) };
     const invoke = (address: string) => boundary.onRequest({
-      request: request('/auth/login', { headers: { 'x-real-ip': address } }),
+      request: request('/sign-in/email', { method: 'POST', headers: { 'x-real-ip': address } }),
       set: { headers: {} },
       server,
     });

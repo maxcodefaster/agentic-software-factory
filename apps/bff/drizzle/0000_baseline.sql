@@ -63,6 +63,7 @@ CREATE TABLE "delivery_completion" (
 CREATE TABLE "delivery_contributor" (
 	"delivery_id" text NOT NULL,
 	"factory_user_id" text NOT NULL,
+	"forgejo_access_revoked_at" timestamp with time zone,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "delivery_contributor_delivery_id_factory_user_id_pk" PRIMARY KEY("delivery_id","factory_user_id")
@@ -356,6 +357,9 @@ CREATE TABLE "user" (
 	"image" text,
 	"preferred_username" text DEFAULT '' NOT NULL,
 	"groups" text[] DEFAULT '{}' NOT NULL,
+	"deprovisioned_at" timestamp with time zone,
+	"deprovisioned_coder_user_id" text,
+	"coder_deprovisioned_at" timestamp with time zone,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "user_email_unique" UNIQUE("email")
@@ -457,4 +461,51 @@ CREATE INDEX "system_onboarding_event_timeline_idx" ON "system_onboarding_event"
 CREATE INDEX "system_registration_team_idx" ON "system_registration" USING btree ("tenant_id","team_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "system_registration_forgejo_repository_uq" ON "system_registration" USING btree ("tenant_id","forgejo_owner","forgejo_repository");--> statement-breakpoint
 CREATE INDEX "verification_identifier_idx" ON "verification" USING btree ("identifier");--> statement-breakpoint
-CREATE INDEX "workspace_startup_slo_idx" ON "workspace_startup" USING btree ("workspace_kind","cache_state","outcome","requested_at");
+CREATE INDEX "workspace_startup_slo_idx" ON "workspace_startup" USING btree ("workspace_kind","cache_state","outcome","requested_at");--> statement-breakpoint
+CREATE FUNCTION reject_deprovisioned_user_authority() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+	authority_user_id text;
+	user_is_active boolean;
+BEGIN
+	authority_user_id := COALESCE(to_jsonb(NEW) ->> 'factory_user_id', to_jsonb(NEW) ->> 'user_id');
+	IF authority_user_id IS NULL AND TG_TABLE_NAME IN ('oauth_access_token', 'oauth_consent', 'oauth_refresh_token') THEN
+		SELECT user_id INTO authority_user_id FROM oauth_client WHERE client_id = to_jsonb(NEW) ->> 'client_id';
+	END IF;
+	IF authority_user_id IS NULL THEN RETURN NEW; END IF;
+	SELECT deprovisioned_at IS NULL INTO user_is_active FROM "user" WHERE id = authority_user_id FOR UPDATE;
+	IF user_is_active = false THEN RAISE EXCEPTION 'cannot grant authority to deprovisioned user'; END IF;
+	RETURN NEW;
+END;
+$$;--> statement-breakpoint
+CREATE FUNCTION reject_deprovisioned_user_verification() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+	authority_user_id text;
+	user_is_active boolean;
+BEGIN
+	authority_user_id := CASE
+		WHEN pg_input_is_valid(NEW.value, 'jsonb') THEN COALESCE(NEW.value::jsonb ->> 'userId', CASE WHEN jsonb_typeof(NEW.value::jsonb) = 'string' THEN NEW.value::jsonb #>> '{}' END)
+		ELSE NEW.value
+	END;
+	SELECT deprovisioned_at IS NULL INTO user_is_active FROM "user" WHERE id = authority_user_id FOR UPDATE;
+	IF user_is_active = false THEN RAISE EXCEPTION 'cannot create verification for deprovisioned user'; END IF;
+	RETURN NEW;
+END;
+$$;--> statement-breakpoint
+CREATE FUNCTION reject_deprovisioned_user_reactivation() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+	IF OLD.deprovisioned_at IS NOT NULL AND (NEW.deprovisioned_at IS NULL OR cardinality(NEW.groups) > 0) THEN
+		RAISE EXCEPTION 'cannot reactivate deprovisioned user';
+	END IF;
+	RETURN NEW;
+END;
+$$;--> statement-breakpoint
+CREATE TRIGGER account_active_user BEFORE INSERT OR UPDATE ON "account" FOR EACH ROW EXECUTE FUNCTION reject_deprovisioned_user_authority();--> statement-breakpoint
+CREATE TRIGGER coder_user_binding_active_user BEFORE INSERT OR UPDATE ON "coder_user_binding" FOR EACH ROW EXECUTE FUNCTION reject_deprovisioned_user_authority();--> statement-breakpoint
+CREATE TRIGGER delivery_contributor_active_user BEFORE INSERT OR UPDATE OF factory_user_id ON "delivery_contributor" FOR EACH ROW EXECUTE FUNCTION reject_deprovisioned_user_authority();--> statement-breakpoint
+CREATE TRIGGER oauth_access_token_active_user BEFORE INSERT OR UPDATE ON "oauth_access_token" FOR EACH ROW EXECUTE FUNCTION reject_deprovisioned_user_authority();--> statement-breakpoint
+CREATE TRIGGER oauth_client_active_user BEFORE INSERT OR UPDATE ON "oauth_client" FOR EACH ROW EXECUTE FUNCTION reject_deprovisioned_user_authority();--> statement-breakpoint
+CREATE TRIGGER oauth_consent_active_user BEFORE INSERT OR UPDATE ON "oauth_consent" FOR EACH ROW EXECUTE FUNCTION reject_deprovisioned_user_authority();--> statement-breakpoint
+CREATE TRIGGER oauth_refresh_token_active_user BEFORE INSERT OR UPDATE ON "oauth_refresh_token" FOR EACH ROW EXECUTE FUNCTION reject_deprovisioned_user_authority();--> statement-breakpoint
+CREATE TRIGGER session_active_user BEFORE INSERT OR UPDATE ON "session" FOR EACH ROW EXECUTE FUNCTION reject_deprovisioned_user_authority();--> statement-breakpoint
+CREATE TRIGGER verification_active_user BEFORE INSERT OR UPDATE ON "verification" FOR EACH ROW EXECUTE FUNCTION reject_deprovisioned_user_verification();--> statement-breakpoint
+CREATE TRIGGER user_deprovisioned_reactivation BEFORE UPDATE ON "user" FOR EACH ROW EXECUTE FUNCTION reject_deprovisioned_user_reactivation();

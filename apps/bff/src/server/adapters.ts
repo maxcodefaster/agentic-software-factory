@@ -66,7 +66,7 @@ export function adaptForgejo(
   const writeRequirement = <T>(number: number, scope: import('./types').RequestScope, action: () => Promise<T>) => {
     if (!withRequirementWriteLock) return action();
     const repository = scope.repository?.systemId ?? 'default';
-    return withRequirementWriteLock(`requirement-write:${defaultTeam}:${repository}:${number}`, action);
+    return withRequirementWriteLock(`requirement-write:${repository}:${number}`, action);
   };
   return {
     ready: (signal) => client.ready(signal),
@@ -81,8 +81,14 @@ export function adaptForgejo(
       } as typeof board;
     },
     createRequirement: (input, scope) => scoped(scope).createRequirement(input.title, input.body, input.team, scope.signal),
-    updateRequirement: async (number, input, scope) => {
+    updateRequirement: (number, input, scope) => writeRequirement(number, scope, async () => {
       const current = await access(number, scope);
+      const card = toCard(current);
+      if ((card.acceptance || card.status === 'implementation' || card.status === 'done')
+        && ((input.title !== undefined && input.title !== current.title)
+          || (input.body !== undefined && input.body !== card.body))) {
+        throw Object.assign(new Error('accepted requirements cannot be edited'), { status: 409 });
+      }
       return scoped(scope).updateRequirement(
         number,
         input.title ?? current.title,
@@ -92,12 +98,23 @@ export function adaptForgejo(
         input.expectedUpdatedAt,
         scope.signal,
       );
-    },
-    closeRequirement: async (number, scope) => { await access(number, scope); return scoped(scope).closeRequirement(number, scope.signal); },
-    transition: async (number, status, expectedUpdatedAt, scope) => {
-      await access(number, scope);
+    }),
+    closeRequirement: (number, scope) => writeRequirement(number, scope, async () => {
+      const issue = await access(number, scope);
+      const status = toCard(issue).status;
+      if (status === 'implementation' || status === 'done') {
+        throw Object.assign(new Error('requirements cannot be deleted after implementation starts'), { status: 409 });
+      }
+      return scoped(scope).closeRequirement(number, scope.signal);
+    }),
+    transition: (number, status, expectedUpdatedAt, scope) => writeRequirement(number, scope, async () => {
+      const current = toCard(await access(number, scope)).status;
+      const order = ['ideation', 'requirements', 'implementation', 'done'];
+      if (order.indexOf(status) < order.indexOf(current)) {
+        throw Object.assign(new Error('requirements cannot move backward'), { status: 409 });
+      }
       return scoped(scope).transition(number, status, expectedUpdatedAt, scope.signal);
-    },
+    }),
     accept: (number, actor, spec, scope) => writeRequirement(number, scope, async () => {
       await access(number, scope);
       return scoped(scope).accept(number, actor, spec, scope.signal);
@@ -113,30 +130,30 @@ export function adaptForgejo(
       return interviews.filter(({ number, state }) => state.teamId === repository.team
         && state.repository === repository.systemId && state.requirementNumber === number);
     },
-    beginInterview: async (number, actor, retake, binding, pending, scope) => {
+    beginInterview: (number, actor, retake, binding, pending, expectedVersion, scope) => writeRequirement(number, scope, async () => {
       await access(number, scope);
-      return scoped(scope).beginInterview(number, actor, retake, binding, pending, scope.signal);
-    },
-    prepareInterviewAnswer: async (number, actor, answer, payload, operationId, scope) => {
+      return scoped(scope).beginInterview(number, actor, retake, binding, pending, expectedVersion, scope.signal);
+    }),
+    prepareInterviewAnswer: (number, actor, answer, payload, operationId, scope) => writeRequirement(number, scope, async () => {
       await access(number, scope);
       return scoped(scope).prepareInterviewAnswer(number, actor, answer, payload, operationId, scope.signal);
-    },
-    setInterviewOperationPhase: async (number, operationId, phase, scope) => {
+    }),
+    setInterviewOperationPhase: (number, operationId, phase, scope) => writeRequirement(number, scope, async () => {
       await access(number, scope);
       return scoped(scope).setInterviewOperationPhase(number, operationId, phase, scope.signal);
-    },
-    setInterviewOperationFailure: async (number, operationId, failure, scope) => {
+    }),
+    setInterviewOperationFailure: (number, operationId, failure, scope) => writeRequirement(number, scope, async () => {
       await access(number, scope);
       return scoped(scope).setInterviewOperationFailure(number, operationId, failure, scope.signal);
-    },
-    completeInterviewAnswer: async (number, operationId, next, done, scope) => {
+    }),
+    completeInterviewAnswer: (number, operationId, next, done, scope) => writeRequirement(number, scope, async () => {
       await access(number, scope);
       return scoped(scope).completeInterviewAnswer(number, operationId, next, done, scope.signal);
-    },
-    recordInterviewRefinement: async (number, actor, note, next, scope) => {
+    }),
+    recordInterviewRefinement: (number, actor, note, next, expectedVersion, scope) => writeRequirement(number, scope, async () => {
       await access(number, scope);
-      return scoped(scope).recordInterviewRefinement(number, actor, note, next, scope.signal);
-    },
+      return scoped(scope).recordInterviewRefinement(number, actor, note, next, expectedVersion, scope.signal);
+    }),
     getIssue: async (number, scope) => {
       const issue = await access(number, scope);
       const card = toCard(issue);
@@ -150,7 +167,6 @@ export function adaptCoder(client: CoderClient, config: { template: string; work
   return {
     summary: (scope) => client.summaryForIdentity(coderIdentity(scope.identity), scope.signal),
     developerSummary: (scope) => client.summaryForIdentity(coderIdentity(scope.identity), scope.signal, true),
-    systemSummary: (repositoryUrl, signal) => client.systemSummary(repositoryUrl, signal),
     ensureDeveloperWorkspace: (application, scope) => client.ensureDeveloperWorkspaceFor(coderIdentity(scope.identity), {
       repositoryUrl: application.cloneUrl,
       defaultBranch: application.defaultBranch,
@@ -196,6 +212,7 @@ export function createServerServices(input: {
   applications: ApplicationRegistry;
   staging?: import('../applications/staging').StagingReconciler;
   listUsers: (query: import('./types').UserDirectoryQuery) => Promise<import('@agentic-software-factory/api-contracts/users').UsersResponse>;
+  deprovisionUser?: ServerServices['deprovisionUser'];
   applicationOnboarding?: ApplicationOnboarding;
   tenant: { id: string; group: string; adminGroup: string; businessGroup: string; developerGroup: string; teams: Array<{ slug: string; displayName: string; group: string | null }> };
   identityByUserId?: (factoryUserId: string) => Promise<Identity | null>;
@@ -223,6 +240,7 @@ export function createServerServices(input: {
     applications: input.applications,
     ...(input.staging ? { staging: input.staging } : {}),
     listUsers: input.listUsers,
+    ...(input.deprovisionUser ? { deprovisionUser: input.deprovisionUser } : {}),
     ...(input.applicationOnboarding ? { applicationOnboarding: input.applicationOnboarding } : {}),
     tenant: input.tenant,
     ...(input.identityByUserId ? { identityByUserId: input.identityByUserId } : {}),

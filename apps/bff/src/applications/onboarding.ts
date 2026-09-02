@@ -5,6 +5,10 @@
  */
 
 import type { ForgejoClient, Repository } from '../forgejo/client';
+import type {
+  OnboardingAttempt,
+  OnboardingRepository,
+} from '@agentic-software-factory/api-contracts/applications';
 import { startLeaseHeartbeat } from '../lease-heartbeat';
 import type { ApplicationDefinition, SystemRegistration } from './catalog';
 import type { OnboardingLifecycleStore } from './onboarding-store';
@@ -12,29 +16,7 @@ import type { ApplicationRegistry } from './registry';
 import type { StagingReconciler } from './staging';
 import { inspectSystemContract, systemContractReferences, type CompatibilityIssue, type SystemContract } from './system-contract';
 
-export interface OnboardingRepository {
-  name: string;
-  fullName: string;
-  description: string;
-  defaultBranch: string;
-  repositoryUrl: string;
-}
-
-export interface OnboardingAttempt {
-  systemId: string;
-  team: string;
-  repositoryOwner: string;
-  repositoryName: string;
-  phase: import('./onboarding-store').OnboardingPhase;
-  targetSha: string | null;
-  contractVersion: number | null;
-  compatibilityIssues: CompatibilityIssue[];
-  policyPlan: Record<string, unknown> | null;
-  lastError: string | null;
-  attempts: number;
-  nextAttemptAt: string | null;
-  updatedAt: string;
-}
+export type { OnboardingAttempt, OnboardingRepository };
 
 interface OnboardingConfig {
   owners: string[];
@@ -155,7 +137,7 @@ export class ApplicationOnboarding {
     if (generation === null) {
       throw Object.assign(new Error('System onboarding is already in progress'), { status: 409 });
     }
-    const heartbeat = startLeaseHeartbeat(
+    const heartbeat = await startLeaseHeartbeat(
       () => this.lifecycle.renew(id, this.workerId, generation, new Date(), leaseMs),
       this.heartbeatMs,
       { lost: 'System onboarding lease was lost', failed: 'System onboarding lease heartbeat failed' },
@@ -171,8 +153,12 @@ export class ApplicationOnboarding {
       heartbeat.throwIfLost();
       throw error;
     } finally {
-      heartbeat.stop();
-      await this.lifecycle.release(id, this.workerId, generation);
+      try {
+        await heartbeat.stop();
+        heartbeat.throwIfLost();
+      } finally {
+        await this.lifecycle.release(id, this.workerId, generation);
+      }
     }
   }
 
@@ -201,7 +187,7 @@ export class ApplicationOnboarding {
     const leaseMs = 15 * 60_000;
     const generation = await this.lifecycle.claim(systemId, this.workerId, new Date(), leaseMs);
     if (generation === null) throw Object.assign(new Error('System onboarding is already in progress'), { status: 409 });
-    const heartbeat = startLeaseHeartbeat(
+    const heartbeat = await startLeaseHeartbeat(
       () => this.lifecycle.renew(systemId, this.workerId, generation, new Date(), leaseMs),
       this.heartbeatMs,
       { lost: 'System onboarding lease was lost', failed: 'System onboarding lease heartbeat failed' },
@@ -211,15 +197,26 @@ export class ApplicationOnboarding {
       await this.deleteStaging(record, transitionSignal);
       await this.revokeFactoryAccess(record, transitionSignal);
       heartbeat.throwIfLost();
+      await heartbeat.stop();
+      heartbeat.throwIfLost();
       await this.lifecycle.remove(systemId, this.workerId, generation);
       this.registry.invalidate(systemId);
     } catch (error) {
-      heartbeat.throwIfLost();
-      await this.lifecycle.fail(systemId, this.workerId, generation, 'unregistering', error instanceof Error ? error.message : String(error), [], new Date(Date.now() + 30_000)).catch(() => undefined);
-      throw error;
+      await heartbeat.stop();
+      let failure = error;
+      try {
+        heartbeat.throwIfLost();
+      } catch (leaseError) {
+        failure = leaseError;
+      }
+      await this.lifecycle.fail(systemId, this.workerId, generation, 'unregistering', failure instanceof Error ? failure.message : String(failure), [], new Date(Date.now() + 30_000)).catch(() => undefined);
+      throw failure;
     } finally {
-      heartbeat.stop();
-      await this.lifecycle.release(systemId, this.workerId, generation);
+      try {
+        await heartbeat.stop();
+      } finally {
+        await this.lifecycle.release(systemId, this.workerId, generation);
+      }
     }
   }
 
@@ -358,7 +355,7 @@ export class ApplicationOnboarding {
     const leaseMs = 5 * 60_000;
     const generation = await this.lifecycle.claim(record.systemId, this.workerId, new Date(), leaseMs);
     if (generation === null) throw Object.assign(new Error('System onboarding is already in progress'), { status: 409 });
-    const heartbeat = startLeaseHeartbeat(
+    const heartbeat = await startLeaseHeartbeat(
       () => this.lifecycle.renew(record.systemId, this.workerId, generation, new Date(), leaseMs),
       this.heartbeatMs,
       { lost: 'System onboarding lease was lost', failed: 'System onboarding lease heartbeat failed' },
@@ -396,15 +393,26 @@ export class ApplicationOnboarding {
       await this.lifecycle.policyPlan(record.systemId, this.workerId, generation, { ...currentPlan, access: targetAccess });
       if (!targetExisted) await this.forgejo.ensureTeamRepository(record.repositoryOwner, target.forgejoTeam, record.repositoryName, transitionSignal);
       heartbeat.throwIfLost();
+      await heartbeat.stop();
+      heartbeat.throwIfLost();
       await this.lifecycle.finishReassignment(record.systemId, this.workerId, generation);
     } catch (error) {
-      heartbeat.throwIfLost();
-      const ownershipConflict = typeof error === 'object' && error !== null && 'status' in error && error.status === 409;
-      await this.lifecycle.fail(record.systemId, this.workerId, generation, ownershipConflict ? 'repair' : phase, error instanceof Error ? error.message : String(error), [], ownershipConflict ? undefined : new Date(Date.now() + 30_000)).catch(() => undefined);
-      throw error;
+      await heartbeat.stop();
+      let failure = error;
+      try {
+        heartbeat.throwIfLost();
+      } catch (leaseError) {
+        failure = leaseError;
+      }
+      const ownershipConflict = typeof failure === 'object' && failure !== null && 'status' in failure && failure.status === 409;
+      await this.lifecycle.fail(record.systemId, this.workerId, generation, ownershipConflict ? 'repair' : phase, failure instanceof Error ? failure.message : String(failure), [], ownershipConflict ? undefined : new Date(Date.now() + 30_000)).catch(() => undefined);
+      throw failure;
     } finally {
-      heartbeat.stop();
-      await this.lifecycle.release(record.systemId, this.workerId, generation);
+      try {
+        await heartbeat.stop();
+      } finally {
+        await this.lifecycle.release(record.systemId, this.workerId, generation);
+      }
     }
   }
 

@@ -16,18 +16,6 @@
   --brand-mint-800: #197665;
   --brand-mint-900: #115247;
 
-  /* Legacy yellow aliases; use --brand-mint-* in new CSS */
-  --brand-yellow-50: var(--brand-mint-50);
-  --brand-yellow-100: var(--brand-mint-100);
-  --brand-yellow-200: var(--brand-mint-200);
-  --brand-yellow-300: var(--brand-mint-300);
-  --brand-yellow-400: var(--brand-mint-400);
-  --brand-yellow-500: var(--brand-mint-500);
-  --brand-yellow-600: var(--brand-mint-600);
-  --brand-yellow-700: var(--brand-mint-700);
-  --brand-yellow-800: var(--brand-mint-800);
-  --brand-yellow-900: var(--brand-mint-900);
-
   /* Neutrals — cool/blue-tinted ramp; 900 is the primary foreground */
   --brand-gray-50: var(--brand-light-gray-50);
   --brand-gray-100: var(--brand-light-gray-100);

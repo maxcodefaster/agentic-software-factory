@@ -24,6 +24,7 @@ import { z } from 'zod';
 const CHAT_SCOPES = ['coder:all'] as const;
 const EXTERNAL_AUTH_SCOPES = ['user:read_personal', 'user:update_personal'] as const;
 const TOKEN_CLEANUP_TIMEOUT_MS = 5_000;
+type WorkspaceKind = 'developer' | 'staging' | 'verification';
 
 export type {
   ChatCapability,
@@ -61,8 +62,6 @@ export interface CoderWorkspaceApp {
   url: string;
   health: 'healthy' | 'initializing' | 'unhealthy' | 'disabled';
 }
-
-type WorkspaceKind = 'developer' | 'staging' | 'verification';
 
 export interface CoderRepositoryRefResolver {
   resolve(repositoryUrl: string, branch: string, signal?: AbortSignal): Promise<string>;
@@ -128,8 +127,7 @@ interface WorkspaceResponse {
           subdomain: boolean;
           subdomain_name?: string;
           health: string;
-           command?: string;
-          sharing_level?: string;
+           sharing_level?: string;
         }>;
       }>;
     }>;
@@ -146,7 +144,7 @@ const workspaceResponseSchema = z.object({
       id: z.string().optional(), parent_id: z.string().nullable().optional(), name: z.string(), status: z.string(),
       display_apps: z.array(z.string()).optional(), apps: z.array(z.object({
         slug: z.string(), display_name: z.string(), external: z.boolean(), url: z.string(), subdomain: z.boolean(),
-        subdomain_name: z.string().optional(), health: z.string(), command: z.string().optional(), sharing_level: z.string().optional(),
+        subdomain_name: z.string().optional(), health: z.string(), sharing_level: z.string().optional(),
       }).passthrough()).optional(),
     }).passthrough()).optional() }).passthrough()).optional(),
   }).passthrough(),
@@ -189,6 +187,7 @@ export class CoderClient extends CoderChatClient {
   private verificationOwnerUsername = "";
   private stagingOwnerId = "";
   private stagingOwnerUsername = "";
+  private restrictedAppSharing: 'owner' | 'authenticated' = 'authenticated';
   private organizationId?: string;
 
   constructor(options: import('./chat').CoderClientOptions) {
@@ -205,6 +204,11 @@ export class CoderClient extends CoderChatClient {
   configureStagingOwner(id: string, username: string): this {
     this.stagingOwnerId = id;
     this.stagingOwnerUsername = username;
+    return this;
+  }
+
+  configureRestrictedAppSharing(sharing: 'owner' | 'authenticated'): this {
+    this.restrictedAppSharing = sharing;
     return this;
   }
 
@@ -229,6 +233,25 @@ export class CoderClient extends CoderChatClient {
 
   async reconcileFactoryMcpConfiguration(signal?: AbortSignal): Promise<void> {
     await this.reconcileFactoryMcp(await this.configuredOrganization(signal), signal);
+  }
+
+  async deprovisionUser(coderUserId: string, signal?: AbortSignal): Promise<{ revokedTokenCount: number }> {
+    let target: CoderUser;
+    try {
+      target = await this.request<CoderUser>('GET', `/api/v2/users/${pathEscape(coderUserId)}`, undefined, 200, signal);
+    } catch (error) {
+      if (this.isCoderStatus(error, 404) || this.isCoderStatus(error, 410)) return { revokedTokenCount: 0 };
+      throw error;
+    }
+    const keys = await this.request<ApiKey[] | null>('GET', `/api/v2/users/${pathEscape(target.id)}/keys/tokens`, undefined, 200, signal) ?? [];
+    const factoryKeys = keys.filter((key) => key.token_name?.startsWith('factory-request-') || key.token_name?.startsWith('factory-chat-'));
+    await Promise.all(factoryKeys.map((key) => this.request<void>(
+      'PUT', `/api/v2/users/${pathEscape(target.id)}/keys/${pathEscape(key.id)}/expire`, undefined, 204, signal,
+    )));
+    if (target.status !== 'suspended') {
+      await this.request<CoderUser>('PUT', `/api/v2/users/${pathEscape(target.id)}/status/suspend`, undefined, 200, signal);
+    }
+    return { revokedTokenCount: factoryKeys.length };
   }
   async startRequirementsChatFor(identity: CoderUserIdentity, input: RequirementsChatInput, signal?: AbortSignal): Promise<RequirementsChatResult> {
     this.requireVerifiedIdentity(identity);
@@ -343,11 +366,6 @@ export class CoderClient extends CoderChatClient {
     return this.withUserToken(identity, 10 * 60, (token) => this.reconcileImplementationChat(binding, signal, token), signal);
   }
 
-  async activeTemplateVersionId(templateName: string, signal?: AbortSignal): Promise<string> {
-    const organizationId = await this.configuredOrganization(signal);
-    return (await this.activeTemplate(organizationId, templateName, 'workspace', signal)).active_version_id;
-  }
-
   async implementationChatStatusFor(identity: CoderUserIdentity, chatId: string, signal?: AbortSignal) {
     const user = await this.resolveUser(identity, signal);
     return this.implementationChatStatusForUser(user, chatId, signal, false);
@@ -368,15 +386,6 @@ export class CoderClient extends CoderChatClient {
       else await cleanup.catch(() => undefined);
     }
     return status;
-  }
-
-  async continueImplementationChatFor(identity: CoderUserIdentity, chatId: string, instruction: string, signal?: AbortSignal): Promise<void> {
-    const user = await this.resolveUser(identity, signal);
-    const status = await this.withMappedUserToken(user, 60, (token) => this.implementationChatStatus(chatId, signal, token), signal);
-    if (!status.operationId) throw new Error('implementation Chat authority binding is missing');
-    signal?.throwIfAborted();
-    if (['waiting', 'error'].includes(status.status)) await this.expireDurableChatTokens(user.id, status.operationId);
-    return this.withDurableChatToken(user, status.operationId, (token) => this.continueImplementationChat(chatId, instruction, signal, token), signal);
   }
 
   async ensureVerificationWorkspaceFor(identity: CoderUserIdentity, input: {
@@ -616,31 +625,6 @@ export class CoderClient extends CoderChatClient {
     return this.toWorkspace(workspace, currentValues, await this.chatAllowed(owner.username, signal));
   }
 
-  async rebuildDeveloperWorkspaceFor(identity: CoderUserIdentity, workspaceId: string, input: {
-    repositoryUrl: string; branch: string; repositoryRef?: string; templateName: string; workspaceNamespace: string;
-  }, signal?: AbortSignal): Promise<CoderWorkspace> {
-    const repositoryRef = input.repositoryRef ?? await this.resolveRepositoryRef(input.repositoryUrl, input.branch, signal);
-    assertGitSha(repositoryRef);
-    const owner = await this.resolveUser(identity, signal);
-    const organizationId = await this.configuredOrganization(signal);
-    const workspace = await this.request<WorkspaceResponse>("GET", `/api/v2/workspaces/${pathEscape(workspaceId)}`, undefined, 200, signal);
-    this.assertWorkspaceOwner(workspace, owner, organizationId, "developer");
-    this.assertWorkspaceTemplate(workspace, input.templateName, "developer");
-    if (!workspace.latest_build.id) throw new Error("developer workspace has no build");
-    const values = await this.buildParameters(workspace.latest_build.id, signal);
-    this.assertWorkspaceScope(values, input.repositoryUrl, 'developer', input.workspaceNamespace);
-    const template = await this.activeTemplate(organizationId, input.templateName, "developer", signal);
-    const richParameterValues = await this.workspaceParameters(input.repositoryUrl, repositoryRef, 'developer', input.workspaceNamespace, signal);
-    if (matchesWorkspaceBuild(workspace, values, template.active_version_id, richParameterValues)) {
-      await this.waitForBuild(workspace.latest_build.id, signal);
-    } else {
-      await this.restartWorkspace(workspace, template.active_version_id, richParameterValues, signal);
-    }
-    return this.developerWorkspaceByIdFor(identity, workspaceId, {
-      repositoryUrl: input.repositoryUrl, repositoryRef, templateName: input.templateName, workspaceNamespace: input.workspaceNamespace,
-    }, signal);
-  }
-
   async ensureIterationWorkspaceFor(identity: CoderUserIdentity, input: {
     repositoryUrl: string; branch: string; headSha: string; contributor?: string; templateName: string; workspaceNamespace: string; templateVersionId?: string;
   }, signal?: AbortSignal): Promise<CoderWorkspace> {
@@ -793,23 +777,6 @@ export class CoderClient extends CoderChatClient {
       workspaces: visible.map(({ workspace, parameters: values }) => this.toWorkspace(workspace, values, chatAvailable, 'owner')),
       available: true,
     };
-  }
-
-  async systemSummary(repositoryUrl: string, signal?: AbortSignal): Promise<CoderSummary> {
-    if (this.baseUrl === "" || this.token === "") return { count: 0, workspaces: [], available: false };
-    const organizationId = await this.configuredOrganization(signal);
-    const owner = await this.stagingOwner(organizationId, signal);
-    const workspace = await this.workspaceByName(owner.id, coderWorkspaceName('staging', repositoryUrl), signal);
-    if (!workspace?.latest_build.id) return { count: 0, workspaces: [], available: true };
-    try {
-      this.assertAutomationWorkspace(workspace, owner, organizationId, repositoryUrl);
-      this.assertWorkspaceTemplate(workspace, this.templateName, 'staging');
-      const parameters = await this.buildParameters(workspace.latest_build.id, signal);
-      if (!matchesWorkspaceScope(parameters, repositoryUrl, 'staging', this.workspaceNamespace)) return { count: 0, workspaces: [], available: true };
-      return { count: 1, workspaces: [this.toWorkspace(workspace, parameters, false, 'shared')], available: true };
-    } catch {
-      return { count: 0, workspaces: [], available: true };
-    }
   }
 
   private async chatAllowed(owner: string, signal?: AbortSignal): Promise<boolean> {
@@ -1095,16 +1062,16 @@ export class CoderClient extends CoderChatClient {
       return `${new URL(this.publicUrl).protocol}//${host}`;
     };
     const ide = apps.find((app) => isIdeApp(app) && app.health === 'healthy');
-    const commandApps = apps.filter((app) => Boolean(app.command));
-    const urlApps = apps.filter((app) => !app.command && !isIdeApp(app) && !isTerminalApp(app) && app.health !== 'disabled');
-    const verificationApps = urlApps.filter((app) => !app.external && app.sharing_level === 'authenticated');
-    const projectedApps = (parameters.workspace_kind === 'verification' || projection === 'shared' ? verificationApps : [...urlApps, ...commandApps])
+    const urlApps = apps.filter((app) => !isIdeApp(app) && !isTerminalApp(app) && app.health !== 'disabled');
+    const restrictedApps = urlApps.filter((app) => !app.external && app.sharing_level === this.restrictedAppSharing);
+    const sharedApps = this.restrictedAppSharing === 'authenticated' ? restrictedApps : [];
+    const restrictedAppsHealthy = restrictedApps.length === urlApps.length
+      && restrictedApps.every((app) => app.health === 'healthy' || app.health === 'disabled');
+    const projectedApps = (parameters.workspace_kind === 'verification' || projection === 'shared' ? sharedApps : urlApps)
       .map((app) => ({
         slug: app.slug,
         displayName: app.display_name || app.slug,
-        url: app.command
-          ? `${this.publicUrl}${workspacePath}.${pathEscape(agent?.name ?? 'main')}/terminal?app=${encodeURIComponent(app.slug)}`
-          : appUrl(app.slug)!,
+        url: appUrl(app.slug)!,
         health: normalizeAppHealth(app.health),
       }));
     const terminalUrl = agent?.display_apps?.includes('web_terminal')
@@ -1117,7 +1084,8 @@ export class CoderClient extends CoderChatClient {
       template: workspace.template_display_name || workspace.template_name,
       status: workspace.latest_build.status,
       transition: workspace.latest_build.transition,
-      healthy: workspace.health.healthy && agent?.status === "connected",
+      healthy: workspace.health.healthy && agent?.status === "connected"
+        && (!(parameters.workspace_kind === 'verification' || projection === 'shared') || restrictedAppsHealthy),
       outdated: workspace.outdated,
       lastUsedAt: workspace.last_used_at,
       url: projection === 'owner' && parameters.workspace_kind === 'developer' ? `${this.publicUrl}${workspacePath}` : undefined,
@@ -1159,12 +1127,15 @@ export class CoderClient extends CoderChatClient {
   private async workspaceParameters(repositoryUrl: string, repositoryRef: string, workspaceKind: WorkspaceKind, workspaceNamespace: string, signal?: AbortSignal): Promise<WorkspaceBuildParameter[]> {
     if (!this.repositoryRefs) throw new Error('Coder repository ref resolver is not configured');
     const contract = await this.repositoryRefs.workspaceContract(repositoryUrl, repositoryRef, workspaceKind, signal);
+    const apps = workspaceKind === 'developer'
+      ? contract.apps
+      : contract.apps.map((app) => app.url ? { ...app, share: this.restrictedAppSharing } : app);
     return [
       { name: 'repository_url', value: repositoryUrl },
       { name: 'repository_ref', value: repositoryRef },
       { name: 'workspace_kind', value: workspaceKind },
       { name: 'workspace_namespace', value: workspaceNamespace },
-      { name: 'repository_apps', value: JSON.stringify(contract.apps) },
+      { name: 'repository_apps', value: JSON.stringify(apps) },
       { name: 'devcontainer_path', value: contract.devcontainerPath ?? (workspaceKind === 'verification' ? '.devcontainer/verification/devcontainer.json' : '.devcontainer/devcontainer.json') },
       { name: 'supervisor_commands', value: JSON.stringify(contract.supervisorCommands ?? {}) },
       { name: 'supervisor_shutdown', value: contract.shutdownCommand ?? 'true' },

@@ -32,13 +32,30 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: jdx/mise-action@5ac50f778e26fac95da98d50503682459e86d566 # v3.4.0
       - run: mise run check
+      - name: Smoke test the production container runtime
+        run: sh apps/bff/docker-runtime-smoke.sh
 
   e2e:
     if: github.event_name == 'workflow_dispatch' && inputs.run_e2e
+    environment: factory-e2e
     runs-on:
       group: factory-e2e
     timeout-minutes: 45
     steps:
+      - name: Require the default branch commit
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/$DEFAULT_BRANCH"
+          test -n "$GITHUB_SHA"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
       - uses: jdx/mise-action@5ac50f778e26fac95da98d50503682459e86d566 # v3.4.0
+      - name: Verify immutable checkout
+        shell: bash
+        run: test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
       - run: mise run e2e

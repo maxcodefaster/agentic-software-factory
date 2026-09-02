@@ -6,14 +6,16 @@
 
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import type { MonitoringResponse } from '@agentic-software-factory/api-contracts/monitoring';
-import type { Observable } from 'rxjs';
+import { monitoringResponseSchema, type MonitoringResponse } from '@agentic-software-factory/api-contracts/monitoring';
+import { map, type Observable } from 'rxjs';
 
 @Injectable({ providedIn: 'root' })
 export class MonitoringClient {
   private readonly http = inject(HttpClient);
 
   getWorkspaceMonitoring(): Observable<MonitoringResponse> {
-    return this.http.get<MonitoringResponse>('/api/v1/governance');
+    return this.http.get<unknown>('/api/v1/governance').pipe(
+      map((response) => monitoringResponseSchema.parse(response)),
+    );
   }
 }

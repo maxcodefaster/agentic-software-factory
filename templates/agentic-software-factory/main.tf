@@ -159,6 +159,17 @@ variable "staging_owner" {
   }
 }
 
+variable "restricted_app_sharing" {
+  type        = string
+  description = "Coder sharing level for staging and verification URL apps. Authenticated means every authenticated user in the Coder deployment."
+  default     = "authenticated"
+
+  validation {
+    condition     = contains(["owner", "authenticated"], var.restricted_app_sharing)
+    error_message = "restricted_app_sharing must be owner or authenticated."
+  }
+}
+
 variable "default_repository_url" {
   type        = string
   description = "Repository used to validate the template during publication."
@@ -346,7 +357,6 @@ locals {
   supervisor_commands = data.coder_parameter.supervisor_commands.value == "" ? {} : try(jsondecode(data.coder_parameter.supervisor_commands.value), {})
   running_apps        = { for slug, app in local.repository_app_map : slug => app if data.coder_workspace.me.start_count == 1 }
   url_apps            = { for slug, app in local.running_apps : slug => app if try(app.url, null) != null }
-  command_apps        = { for slug, app in local.running_apps : slug => app if try(app.command, null) != null }
   app_base_env = {
     for slug, app in local.url_apps : "FACTORY_${upper(replace(slug, "-", "_"))}_BASE" => "/"
   }
@@ -526,12 +536,10 @@ resource "coder_agent" "main" {
       error_message = "supervisor_commands must be a JSON object."
     }
     precondition {
-      condition = local.verification ? alltrue([
-        for app in local.repository_apps : try(app.url, null) != null && try(app.command, null) == null && try(app.share, "") == "authenticated"
-        ]) : local.staging ? alltrue([
-        for app in local.repository_apps : (try(app.url, null) != null) != (try(app.command, null) != null)
-      ]) : length([for app in local.repository_apps : app if try(app.command, null) != null]) <= 1
-      error_message = "Verification workspaces permit authenticated URL apps only; staging apps must define exactly one URL or command; developer workspaces permit at most one command app."
+      condition = alltrue([
+        for app in local.repository_apps : try(app.url, null) != null && (!local.verification || try(app.share, "") == var.restricted_app_sharing)
+      ])
+      error_message = "Repository applications must define a URL; verification applications must use the configured restricted sharing level."
     }
   }
 }
@@ -548,7 +556,7 @@ resource "coder_app" "url" {
   group        = try(each.value.group, null)
   order        = try(each.value.order, null)
   subdomain    = true
-  share        = local.restricted ? "authenticated" : "owner"
+  share        = local.restricted ? var.restricted_app_sharing : "owner"
 
   dynamic "healthcheck" {
     for_each = try(each.value.healthCheck, null) == null ? [] : [each.value.healthCheck]
@@ -558,19 +566,6 @@ resource "coder_app" "url" {
       threshold = healthcheck.value.threshold
     }
   }
-}
-
-resource "coder_app" "command" {
-  for_each = local.restricted ? {} : local.command_apps
-
-  agent_id     = coder_agent.main.id
-  slug         = each.key
-  display_name = try(each.value.displayName, each.key)
-  command      = each.value.command
-  icon         = try(each.value.icon, null)
-  group        = try(each.value.group, null)
-  order        = try(each.value.order, null)
-  share        = "owner"
 }
 
 module "code-server" {

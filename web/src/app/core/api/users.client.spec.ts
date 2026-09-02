@@ -9,12 +9,18 @@ import { TestBed } from '@angular/core/testing';
 import { UsersClient } from './users.client';
 
 describe('UsersClient', () => {
+  beforeEach(() => TestBed.configureTestingModule({ imports: [HttpClientTestingModule] }));
+
   it('loads the tenant user directory', () => {
-    TestBed.configureTestingModule({
-      imports: [HttpClientTestingModule],
-    });
     const client = TestBed.inject(UsersClient);
     client.list({ team: 'operations', application: null }).subscribe((response) => expect(response.users[0]?.username).toBe('alice'));
     TestBed.inject(HttpTestingController).expectOne('/api/v1/users?team=operations').flush({ users: [{ id: '1', username: 'alice', displayName: 'Alice', initials: 'A' }] });
+  });
+
+  it('rejects a malformed user directory response', () => {
+    let error: unknown;
+    TestBed.inject(UsersClient).list({ team: 'operations', application: null }).subscribe({ error: (failure) => { error = failure; } });
+    TestBed.inject(HttpTestingController).expectOne('/api/v1/users?team=operations').flush({ users: [{ id: 1, username: 'alice' }] });
+    expect(error).toBeTruthy();
   });
 });

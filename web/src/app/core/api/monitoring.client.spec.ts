@@ -13,10 +13,20 @@ describe('MonitoringClient', () => {
   beforeEach(() => TestBed.configureTestingModule({ imports: [HttpClientTestingModule] }));
 
   it('requests workspace monitoring', () => {
-    TestBed.inject(MonitoringClient).getWorkspaceMonitoring().subscribe();
+    let response: unknown;
+    TestBed.inject(MonitoringClient).getWorkspaceMonitoring().subscribe((value) => { response = value; });
 
     const request = TestBed.inject(HttpTestingController).expectOne('/api/v1/governance');
     expect(request.request.method).toBe('GET');
-    request.flush({});
+    const monitoring = { generatedAt: '', workspaces: { available: true, count: 0, workspaces: [] }, capabilities: {} };
+    request.flush(monitoring);
+    expect(response).toEqual(monitoring);
+  });
+
+  it('rejects a malformed workspace monitoring response', () => {
+    let error: unknown;
+    TestBed.inject(MonitoringClient).getWorkspaceMonitoring().subscribe({ error: (failure) => { error = failure; } });
+    TestBed.inject(HttpTestingController).expectOne('/api/v1/governance').flush({ generatedAt: '', workspaces: [] });
+    expect(error).toBeTruthy();
   });
 });

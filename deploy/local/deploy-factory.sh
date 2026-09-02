@@ -6,11 +6,15 @@
 set -eu
 
 dry_run=false
-if [ "${1:-}" = --dry-run ]; then
-  dry_run=true
+full_stack=false
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --dry-run) dry_run=true ;;
+    --full-stack) full_stack=true ;;
+    *) printf 'usage: deploy-factory.sh [--dry-run] [--full-stack]\n' >&2; exit 2 ;;
+  esac
   shift
-fi
-[ "$#" -eq 0 ] || { printf 'usage: deploy-factory.sh [--dry-run]\n' >&2; exit 2; }
+done
 
 [ "$(kubectl config current-context)" = orbstack ] || {
   printf 'Refusing local Factory deploy outside the orbstack Kubernetes context.\n' >&2
@@ -35,10 +39,14 @@ if [ "$dry_run" = true ]; then
   else
     printf '+ docker build --label factory.application/dev-image=true --label factory.application/source-digest=%s -t %s -f %s/apps/bff/Dockerfile %s\n' "$digest" "$image" "$context" "$context"
   fi
-  FACTORY_SECRETS_CHECKSUM=$checksum "$root/deploy/local/rollout-factory.sh" --dry-run --factory-only "$image" IfNotPresent
+  rollout_args=--factory-only
+  [ "$full_stack" = false ] || rollout_args=
+  FACTORY_SECRETS_CHECKSUM=$checksum "$root/deploy/local/rollout-factory.sh" --dry-run $rollout_args "$image" IfNotPresent
   exit
 fi
 
 image_matches_source ||
   docker build --label factory.application/dev-image=true --label "factory.application/source-digest=$digest" -t "$image" -f "$context/apps/bff/Dockerfile" "$context"
-FACTORY_SECRETS_CHECKSUM=$checksum "$root/deploy/local/rollout-factory.sh" --factory-only "$image" IfNotPresent
+rollout_args=--factory-only
+[ "$full_stack" = false ] || rollout_args=
+FACTORY_SECRETS_CHECKSUM=$checksum "$root/deploy/local/rollout-factory.sh" $rollout_args "$image" IfNotPresent

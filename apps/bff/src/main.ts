@@ -6,6 +6,7 @@
 
 import { createAuthCore } from './auth';
 import { FactoryAuthService } from './auth/service';
+import { UserDeprovisionService, UserDeprovisionStore } from './auth/deprovision';
 import { createDatabase } from './db';
 import { assertDatabaseSchema, closeDatabase } from './db/migrate';
 import { loadRuntimeConfig } from './env';
@@ -26,13 +27,13 @@ import { StagingStore } from './applications/staging-store';
 import { WorkspaceStartupMetrics } from './applications/startup-metrics';
 import { RetentionService } from './operations/retention';
 import { OtlpTraceExporter } from './operations/tracing';
-import { and, arrayContains, arrayOverlaps, asc, eq } from 'drizzle-orm';
+import { and, arrayContains, arrayOverlaps, asc, eq, sql } from 'drizzle-orm';
 import { resolve } from 'node:path';
 import { coderUserBinding, user } from './db/schema';
 import { WorkerHost } from './worker-host';
 
 const config = loadRuntimeConfig();
-const database = createDatabase(config.databaseUrl);
+const database = createDatabase(config.databaseUrl, config.databaseTlsCa);
 let app: ReturnType<typeof createServer> | undefined;
 let workers: WorkerHost | undefined;
 let shuttingDown = false;
@@ -78,6 +79,7 @@ try {
     fetch: globalThis.fetch.bind(globalThis),
   }).configureVerificationOwner(config.coder.verificationOwnerId, config.coder.verificationOwner)
     .configureStagingOwner(config.coder.stagingOwnerId, config.coder.stagingOwner)
+    .configureRestrictedAppSharing(config.coder.restrictedAppSharing)
     .configureUserBindings({
     async findByFactoryUserId(factoryUserId) {
       const [mapping] = await database.db.select({ coderUserId: coderUserBinding.coderUserId }).from(coderUserBinding)
@@ -85,6 +87,9 @@ try {
       return mapping ?? null;
     },
     async bind(input) {
+      const [active] = await database.db.select({ id: user.id }).from(user)
+        .where(and(eq(user.id, input.factoryUserId), sql`${user.deprovisionedAt} is null`)).limit(1);
+      if (!active) throw new Error('Factory user is deprovisioned');
       await database.db.insert(coderUserBinding).values(input);
     },
     async findByCoderUserId(coderUserId) {
@@ -223,7 +228,7 @@ try {
     const [registered, tenantUsers] = await Promise.all([
       applications.list(),
       database.db.select({ username: user.preferredUsername, groups: user.groups }).from(user)
-        .where(arrayContains(user.groups, [config.tenant.group])),
+        .where(and(arrayContains(user.groups, [config.tenant.group]), sql`${user.deprovisionedAt} is null`)),
     ]);
     const access = forgejoTeamAccess({
       baseTeam: config.forgejo.humanTeam,
@@ -263,8 +268,24 @@ try {
   const systemsReady = async (): Promise<void> => {
     if (systemDependencyError) throw systemDependencyError;
   };
+  const withRequirementWriteLock = async <T>(key: string, action: () => Promise<T>): Promise<T> => {
+    const connection = await database.sql.reserve();
+    try {
+      await connection`select pg_advisory_lock(hashtextextended(${key}, 0))`;
+      return await action();
+    } finally {
+      await connection`select pg_advisory_unlock(hashtextextended(${key}, 0))`.catch(() => undefined);
+      connection.release();
+    }
+  };
   const implementationStore = new ImplementationStore(database.db, config.tenant.id);
   workers = new WorkerHost();
+  const userDeprovision = new UserDeprovisionService(
+    new UserDeprovisionStore(database.db),
+    coder,
+    forgejo,
+    () => workers?.wake('forgejo-human-access') ?? false,
+  );
   const implementation = new ImplementationService(
     implementationStore,
     implementationForgejo,
@@ -284,6 +305,7 @@ try {
       },
       startupMetrics,
       onOperationReserved: () => workers?.wake('implementation-operations'),
+      withRequirementWriteLock,
     },
   );
   const reconcileImplementationOperations = async (signal?: AbortSignal): Promise<void> => {
@@ -346,6 +368,7 @@ try {
         email: user.email,
       }).from(user).where(and(
         arrayContains(user.groups, [config.tenant.group]),
+        sql`${user.deprovisionedAt} is null`,
         ...(groups?.length ? [arrayOverlaps(user.groups, [...groups])] : []),
       )).orderBy(asc(user.name), asc(user.id)).limit(limit))
         .map((found) => ({
@@ -353,6 +376,7 @@ try {
           initials: found.displayName.trim().split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase() ?? '').join('') || 'U',
         })),
     }),
+    deprovisionUser: (factoryUserId) => userDeprovision.deprovision(factoryUserId, config.tenant.group),
     applicationOnboarding,
     staging,
     tenant: {
@@ -364,7 +388,7 @@ try {
       teams: config.tenant.teams,
     },
     identityByUserId: async (factoryUserId: string) => {
-      const [found] = await database.db.select().from(user).where(eq(user.id, factoryUserId)).limit(1);
+      const [found] = await database.db.select().from(user).where(and(eq(user.id, factoryUserId), sql`${user.deprovisionedAt} is null`)).limit(1);
       return found ? { issuer: config.auth.issuer, subject: found.id, email: found.email, emailVerified: found.emailVerified, name: found.name, username: found.preferredUsername, groups: found.groups } : null;
     },
     databaseReady: async () => { await database.db.execute('select 1'); },
@@ -387,16 +411,7 @@ try {
         connection.release();
       }
     },
-    withRequirementWriteLock: async (key, action) => {
-      const connection = await database.sql.reserve();
-      try {
-        await connection`select pg_advisory_lock(hashtextextended(${key}, 0))`;
-        return await action();
-      } finally {
-        await connection`select pg_advisory_unlock(hashtextextended(${key}, 0))`.catch(() => undefined);
-        connection.release();
-      }
-    },
+    withRequirementWriteLock,
     forgejoPublicUrl: config.forgejo.publicUrl,
     allowedOrigins: config.allowedOrigins,
     trustedProxyCidrs: config.trustedProxyCidrs,
@@ -436,9 +451,11 @@ try {
       name: 'forgejo-human-access', intervalMs: 30_000, failureEvent: 'forgejo_human_access_reconcile_failed', failureLevel: 'warn',
       run: async (signal) => {
         if (systemDependencyError || !await reconcileForgejoHumanAccessGlobally(signal)) return;
+        await userDeprovision.reconcileForgejo(undefined, signal);
         console.log(JSON.stringify({ timestamp: new Date().toISOString(), level: 'info', event: 'forgejo_human_access_reconciled' }));
       },
     });
+    workers.start({ name: 'coder-user-deprovision', intervalMs: 30_000, failureEvent: 'coder_user_deprovision_failed', failureLevel: 'warn', run: (signal) => userDeprovision.reconcileCoder(signal) });
     workers.start({ name: 'implementation-operations', intervalMs: 5_000, immediate: true, failureEvent: 'implementation_operations_reconcile_failed', run: reconcileImplementationOperations });
     workers.start({ name: 'delivery-completions', intervalMs: 5_000, immediate: true, failureEvent: 'delivery_completions_reconcile_failed', run: reconcileDeliveryCompletions });
     workers.start({ name: 'delivery-verifications', intervalMs: 5_000, immediate: true, failureEvent: 'delivery_verifications_reconcile_failed', run: reconcileDeliveryVerifications });

@@ -38,9 +38,6 @@ export const brandMint = {
   900: '#115247',
 } as const;
 
-/** @deprecated Use `brandMint`. Kept for existing TypeScript consumers. */
-export const brandYellow = brandMint;
-
 /** Cool, blue-tinted neutral ramp (hue ~220). 900 = primary foreground. */
 export const brandGray = {
   50: '#f3f8f9',

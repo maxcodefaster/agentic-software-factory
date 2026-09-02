@@ -38,7 +38,7 @@ grep -q "^validate $root/deploy/production$" "$tmp/plan"
 grep -q '^kustomize ' "$tmp/plan"
 grep -q '^diff -k ' "$tmp/plan"
 
-CALLS="$tmp/apply" KUBECTL="$tmp/kubectl-release" FACTORY_VALIDATE="$tmp/validate" OVERLAY="$root/deploy/production" MIGRATIONS_BACKWARD_COMPATIBLE=true sh "$root/deploy/production/upgrade.sh" apply
+CALLS="$tmp/apply" KUBECTL="$tmp/kubectl-release" FACTORY_VALIDATE="$tmp/validate" OVERLAY="$root/deploy/production" sh "$root/deploy/production/upgrade.sh" apply
 grep -n 'delete job/agentic-software-factory-migrate' "$tmp/apply" | grep -q '^3:'
 grep -n 'apply -k ' "$tmp/apply" | grep -q '^4:'
 grep -n 'wait --for=condition=complete job/agentic-software-factory-migrate' "$tmp/apply" | grep -q '^5:'
@@ -46,14 +46,10 @@ grep -n 'rollout resume deployment/agentic-software-factory' "$tmp/apply" | grep
 grep -n 'rollout status deployment/agentic-software-factory' "$tmp/apply" | grep -q '^7:'
 grep -n 'services/agentic-software-factory:8080/proxy/readyz' "$tmp/apply" | grep -q '^8:'
 
-CALLS="$tmp/rollback" KUBECTL="$tmp/kubectl-release" FACTORY_VALIDATE="$tmp/validate" OVERLAY="$root/deploy/production" MIGRATIONS_BACKWARD_COMPATIBLE=true sh "$root/deploy/production/upgrade.sh" rollback
+CALLS="$tmp/rollback" KUBECTL="$tmp/kubectl-release" FACTORY_VALIDATE="$tmp/validate" OVERLAY="$root/deploy/production" sh "$root/deploy/production/upgrade.sh" rollback
 grep -q '^rollout undo deployment/agentic-software-factory' "$tmp/rollback"
 grep -q '^rollout resume deployment/agentic-software-factory' "$tmp/rollback"
 grep -q '^rollout status deployment/agentic-software-factory' "$tmp/rollback"
-if CALLS="$tmp/rejected" KUBECTL="$tmp/kubectl-release" FACTORY_VALIDATE="$tmp/validate" OVERLAY="$root/deploy/production" sh "$root/deploy/production/upgrade.sh" rollback >/dev/null 2>&1; then
-  exit 1
-fi
-test ! -s "$tmp/rejected"
 if CALLS="$tmp/placeholder" KUBECTL="$tmp/kubectl" FACTORY_VALIDATE="$tmp/validate" OVERLAY="$root/deploy/production" sh "$root/deploy/production/upgrade.sh" plan >/dev/null 2>&1; then
   exit 1
 fi

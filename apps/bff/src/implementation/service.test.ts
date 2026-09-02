@@ -188,11 +188,11 @@ describe('ImplementationService', () => {
 
     await service.prepareVerification(record.id, identity);
 
-    expect(ensureVerificationWorkspaceFor).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ headSha: preparedHead }), undefined);
+    expect(ensureVerificationWorkspaceFor).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ headSha: preparedHead }), expect.any(AbortSignal));
     expect(createCommitStatus).toHaveBeenCalledWith(
       'factory', 'payments', preparedHead, 'success', 'factory/verification',
       verificationDescription({ version: 1, deliveryId: record.id, headSha: preparedHead, defaultSha, workspaceId: 'verification-new' }, ''),
-      expect.stringContaining('https://coder.example/api/v2/users/oidc/callback?redirect='), undefined,
+      expect.stringContaining('https://coder.example/api/v2/users/oidc/callback?redirect='), expect.any(AbortSignal),
     );
     expect(createCommitStatus.mock.calls[0]?.[6]).not.toBe('https://verification.example/app');
   });
@@ -319,19 +319,24 @@ describe('ImplementationService', () => {
   });
 
   test('resumes cleanup after a crash that occurred after Forgejo merged', async () => {
+    const reviewedDefaultSha = 'd'.repeat(40);
     const pull = {
       number: 11, state: 'closed', title: '', body: '', html_url: 'https://forgejo.example/pulls/11', draft: false,
       merged: true, mergeable: true, merged_commit_id: 'm'.repeat(40),
-      head: { label: '', ref: 'branch', sha: 'a'.repeat(40) }, base: { label: '', ref: 'main', sha: 'd'.repeat(40) },
+      head: { label: '', ref: 'branch', sha: 'a'.repeat(40) }, base: { label: '', ref: 'main', sha: 'm'.repeat(40) },
     };
-    const completion = { deliveryId: record.id, phase: 'merged', reviewedHeadSha: pull.head.sha, reviewedDefaultSha: pull.base.sha, verificationWorkspaceId: 'verification-1' };
+    const completion = { deliveryId: record.id, phase: 'merged', reviewedHeadSha: pull.head.sha, reviewedDefaultSha, verificationWorkspaceId: 'verification-1' };
     const phases: string[] = [];
     const advanceCompletion = mock(async (...args: unknown[]) => { phases.push(String(args[3])); return true; });
     const mergePullRequest = mock(async () => undefined);
     const service = createService({
       get: mock(async () => record), claimCompletion: mock(async () => 3), advanceCompletion,
       retryCompletion: mock(async () => undefined), renewCompletion: mock(async () => true), touchDelivery: mock(async () => undefined),
-    }, { mergePullRequest });
+    }, { mergePullRequest, getPullRequest: mock(async () => pull) });
+    Object.assign((service as unknown as { projectForgejo: object }).projectForgejo, {
+      getProjectBranchHead: mock(async () => pull.base.sha),
+      getProjectCommit: mock(async () => ({ sha: pull.merged_commit_id, parents: [{ sha: reviewedDefaultSha }, { sha: pull.head.sha }] })),
+    });
     const internals = service as unknown as { loadContext(): Promise<unknown>; finish(context: unknown, signal: unknown, before: () => Promise<void>): Promise<void> };
     internals.loadContext = mock(async () => ({ record, application, branch: 'branch', pull, marker: {} }));
     internals.finish = mock(async (_context, _signal, before) => { await before(); });
@@ -339,6 +344,110 @@ describe('ImplementationService', () => {
     await service.reconcileCompletion(completion as never);
     expect(mergePullRequest).not.toHaveBeenCalled();
     expect(phases).toEqual(['cleanup-pending', 'card-transition-pending', 'complete']);
+  });
+
+  test('derives Forgejo 15 merge identity from the default branch when merged_commit_id is absent', async () => {
+    const reviewedDefaultSha = 'd'.repeat(40);
+    const reviewedHeadSha = 'a'.repeat(40);
+    const mergeSha = 'm'.repeat(40);
+    const pull = {
+      number: 11, state: 'closed', title: '', body: '', html_url: 'https://forgejo.example/pulls/11', draft: false,
+      merged: true, mergeable: true, merged_commit_id: null, merge_base: reviewedDefaultSha,
+      head: { label: '', ref: 'branch', sha: reviewedHeadSha }, base: { label: '', ref: 'main', sha: mergeSha },
+    };
+    const completion = { deliveryId: record.id, phase: 'merged', reviewedHeadSha, reviewedDefaultSha, verificationWorkspaceId: 'verification-1' };
+    const advanceCompletion = mock(async (..._args: unknown[]) => true);
+    const service = createService({
+      get: mock(async () => record), claimCompletion: mock(async () => 3), advanceCompletion,
+      retryCompletion: mock(async () => undefined), renewCompletion: mock(async () => true), touchDelivery: mock(async () => undefined),
+    });
+    Object.assign((service as unknown as { projectForgejo: object }).projectForgejo, {
+      getProjectBranchHead: mock(async () => mergeSha),
+      getProjectCommit: mock(async () => ({ sha: mergeSha, parents: [{ sha: reviewedDefaultSha }, { sha: reviewedHeadSha }] })),
+    });
+    const internals = service as unknown as { loadContext(): Promise<unknown>; finish(context: unknown, signal: unknown, before: () => Promise<void>): Promise<void> };
+    internals.loadContext = mock(async () => ({ record, application, branch: 'branch', pull, marker: {} }));
+    internals.finish = mock(async (_context, _signal, before) => { await before(); });
+
+    await service.reconcileCompletion(completion as never);
+
+    expect(advanceCompletion.mock.calls[0]?.[4]).toEqual({ mergedSha: mergeSha });
+  });
+
+  test('rejects recovery when a merged pull no longer matches reviewed evidence', async () => {
+    const pull = {
+      number: 11, state: 'closed', title: '', body: '', html_url: 'https://forgejo.example/pulls/11', draft: false,
+      merged: true, mergeable: true, merged_commit_id: 'm'.repeat(40),
+      head: { label: '', ref: 'branch', sha: 'b'.repeat(40) }, base: { label: '', ref: 'main', sha: 'd'.repeat(40) },
+    };
+    const completion = { deliveryId: record.id, phase: 'merged', reviewedHeadSha: 'a'.repeat(40), reviewedDefaultSha: pull.base.sha, verificationWorkspaceId: 'verification-1' };
+    const advanceCompletion = mock(async () => true);
+    const retryCompletion = mock(async () => undefined);
+    const service = createService({
+      get: mock(async () => record), claimCompletion: mock(async () => 3), advanceCompletion, retryCompletion, renewCompletion: mock(async () => true),
+    });
+    (service as unknown as { loadContext(): Promise<unknown> }).loadContext = mock(async () => ({ record, application, branch: 'branch', pull, marker: {} }));
+
+    await expect(service.reconcileCompletion(completion as never)).rejects.toThrow('does not match stored review evidence');
+
+    expect(advanceCompletion).not.toHaveBeenCalled();
+    expect(retryCompletion).toHaveBeenCalledWith(record.id, expect.any(String), 3, 'merged pull request does not match stored review evidence');
+  });
+
+  test('rejects recovery when stored merge evidence differs from Forgejo', async () => {
+    const pull = {
+      number: 11, state: 'closed', title: '', body: '', html_url: 'https://forgejo.example/pulls/11', draft: false,
+      merged: true, mergeable: true, merged_commit_id: 'm'.repeat(40),
+      head: { label: '', ref: 'branch', sha: 'a'.repeat(40) }, base: { label: '', ref: 'main', sha: 'd'.repeat(40) },
+    };
+    const completion = { deliveryId: record.id, phase: 'cleanup-pending', reviewedHeadSha: pull.head.sha, reviewedDefaultSha: pull.base.sha, mergedSha: 'x'.repeat(40), verificationWorkspaceId: 'verification-1' };
+    const advanceCompletion = mock(async () => true);
+    const service = createService({
+      get: mock(async () => record), claimCompletion: mock(async () => 3), advanceCompletion,
+      retryCompletion: mock(async () => undefined), renewCompletion: mock(async () => true),
+    });
+    (service as unknown as { loadContext(): Promise<unknown> }).loadContext = mock(async () => ({ record, application, branch: 'branch', pull, marker: {} }));
+
+    await expect(service.reconcileCompletion(completion as never)).rejects.toThrow('does not match stored merge evidence');
+    expect(advanceCompletion).not.toHaveBeenCalled();
+  });
+
+  test('rechecks the default branch immediately before controlled merge', async () => {
+    const headSha = 'a'.repeat(40);
+    const reviewedDefault = 'd'.repeat(40);
+    const pull = {
+      number: 11, state: 'open', title: '', body: '', html_url: 'https://forgejo.example/pulls/11', draft: false,
+      merged: false, mergeable: true, head: { label: '', ref: 'branch', sha: headSha }, base: { label: '', ref: 'main', sha: reviewedDefault },
+    };
+    const completion = { deliveryId: record.id, phase: 'merge-requested', reviewedHeadSha: headSha, reviewedDefaultSha: reviewedDefault, verificationWorkspaceId: 'verification-1' };
+    const mergePullRequest = mock(async () => undefined);
+    const retryCompletion = mock(async () => undefined);
+    const service = createService({
+      get: mock(async () => record), claimCompletion: mock(async () => 3), renewCompletion: mock(async () => true), retryCompletion,
+    }, { getPullRequest: mock(async () => pull), mergePullRequest });
+    Object.assign((service as unknown as { projectForgejo: object }).projectForgejo, {
+      getProjectBranchHead: mock(async () => 'e'.repeat(40)),
+    });
+    (service as unknown as { loadContext(): Promise<unknown> }).loadContext = mock(async () => ({ record, application, branch: 'branch', pull, marker: {} }));
+
+    await expect(service.reconcileCompletion(completion as never)).rejects.toThrow('default branch advanced before merge');
+
+    expect(mergePullRequest).not.toHaveBeenCalled();
+    expect(retryCompletion).toHaveBeenCalledWith(record.id, expect.any(String), 3, 'default branch advanced before merge');
+  });
+
+  test('rejects direct completion recovery without stored review evidence', async () => {
+    const pull = {
+      number: 11, state: 'closed', title: '', body: '', html_url: 'https://forgejo.example/pulls/11', draft: false,
+      merged: true, mergeable: true, merged_commit_id: 'm'.repeat(40),
+      head: { label: '', ref: 'branch', sha: 'a'.repeat(40) }, base: { label: '', ref: 'main', sha: 'd'.repeat(40) },
+    };
+    const service = createService({ get: mock(async () => record), isContributor: mock(async () => false), completion: mock(async () => null) });
+    const internals = service as unknown as Record<string, (...args: unknown[]) => unknown>;
+    internals.applicationFor = mock(async () => application);
+    internals.loadContext = mock(async () => ({ record, application, branch: 'branch', pull, marker: {} }));
+
+    await expect(service.complete(record.id, businessIdentity)).rejects.toThrow('no stored review evidence');
   });
 
   test('aborts completion when heartbeat renewal throws', async () => {
@@ -364,7 +473,10 @@ describe('ImplementationService', () => {
         if (renewals > 1) throw new Error('database unavailable');
         return true;
       }),
-    }, { mergePullRequest });
+    }, { mergePullRequest, getPullRequest: mock(async () => pull) });
+    Object.assign((service as unknown as { projectForgejo: object }).projectForgejo, {
+      getProjectBranchHead: mock(async () => pull.base.sha),
+    });
     Object.assign(service as unknown as { heartbeatMs: number }, { heartbeatMs: 1 });
     const internals = service as unknown as { loadContext(): Promise<unknown> };
     internals.loadContext = mock(async () => ({ record, application, branch: 'branch', pull, marker: {} }));
@@ -374,6 +486,68 @@ describe('ImplementationService', () => {
     expect(mergeSignal?.aborted).toBe(true);
     expect(advanceCompletion).not.toHaveBeenCalled();
     expect(retryCompletion).toHaveBeenCalledWith(record.id, expect.any(String), 3, 'Delivery completion lease heartbeat failed');
+  });
+
+  test('aborts verification when heartbeat renewal fails', async () => {
+    const headSha = 'a'.repeat(40);
+    const defaultSha = 'd'.repeat(40);
+    const pull = {
+      number: 11, state: 'open', title: '', body: '', html_url: 'https://forgejo.example/pulls/11', draft: false,
+      merged: false, mergeable: true, head: { label: '', ref: 'branch', sha: headSha }, base: { label: '', ref: 'main', sha: defaultSha },
+    };
+    let workspaceSignal: AbortSignal | undefined;
+    const retryVerification = mock(async () => undefined);
+    const service = createService({
+      get: mock(async () => record), claimVerification: mock(async () => 2), renewVerification: mock(async () => false),
+      retryVerification, operations: mock(async () => []), retargetVerification: mock(async () => true),
+    });
+    Object.assign(service as unknown as { heartbeatMs: number }, { heartbeatMs: 1 });
+    const internals = service as unknown as Record<string, (...args: unknown[]) => unknown>;
+    internals.loadContext = mock(async () => ({ record, application, branch: 'branch', pull, marker: {} }));
+    internals.synchronize = mock(async (context) => ({ context, defaultSha }));
+    internals.cleanupStaleVerificationWorkspaces = mock(async () => undefined);
+    internals.ensureSpecificationCheck = mock(async () => undefined);
+    Object.assign((service as unknown as { coder: object }).coder, { ensureVerificationWorkspaceFor: mock(async (_identity: unknown, _input: unknown, signal?: AbortSignal) => {
+      workspaceSignal = signal;
+      await new Promise<void>((_resolve, reject) => signal?.addEventListener('abort', () => reject(signal.reason), { once: true }));
+      return {};
+    }) });
+
+    await expect(service.reconcileVerification({ deliveryId: record.id, requestedByUserId: businessIdentity.subject, desiredHeadSha: headSha, desiredDefaultSha: defaultSha, phase: 'provisioning' } as never, businessIdentity))
+      .rejects.toThrow('Delivery verification lease was lost');
+
+    expect(workspaceSignal?.aborted).toBe(true);
+    expect(retryVerification).toHaveBeenCalledWith(record.id, expect.any(String), 2, headSha, 'Delivery verification lease was lost');
+  });
+
+  test('aborts verification when heartbeat renewal throws', async () => {
+    const headSha = 'a'.repeat(40);
+    const defaultSha = 'd'.repeat(40);
+    const pull = {
+      number: 11, state: 'open', title: '', body: '', html_url: 'https://forgejo.example/pulls/11', draft: false,
+      merged: false, mergeable: true, head: { label: '', ref: 'branch', sha: headSha }, base: { label: '', ref: 'main', sha: defaultSha },
+    };
+    const retryVerification = mock(async () => undefined);
+    const service = createService({
+      get: mock(async () => record), claimVerification: mock(async () => 2),
+      renewVerification: mock(async () => { throw new Error('database unavailable'); }),
+      retryVerification, operations: mock(async () => []), retargetVerification: mock(async () => true),
+    });
+    Object.assign(service as unknown as { heartbeatMs: number }, { heartbeatMs: 1 });
+    const internals = service as unknown as Record<string, (...args: unknown[]) => unknown>;
+    internals.loadContext = mock(async () => ({ record, application, branch: 'branch', pull, marker: {} }));
+    internals.synchronize = mock(async (context) => ({ context, defaultSha }));
+    internals.cleanupStaleVerificationWorkspaces = mock(async () => undefined);
+    internals.ensureSpecificationCheck = mock(async () => undefined);
+    Object.assign((service as unknown as { coder: object }).coder, { ensureVerificationWorkspaceFor: mock(async (_identity: unknown, _input: unknown, signal?: AbortSignal) => {
+      await new Promise<void>((_resolve, reject) => signal?.addEventListener('abort', () => reject(signal.reason), { once: true }));
+      return {};
+    }) });
+
+    await expect(service.reconcileVerification({ deliveryId: record.id, requestedByUserId: businessIdentity.subject, desiredHeadSha: headSha, desiredDefaultSha: defaultSha, phase: 'provisioning' } as never, businessIdentity))
+      .rejects.toThrow('Delivery verification lease heartbeat failed');
+
+    expect(retryVerification).toHaveBeenCalledWith(record.id, expect.any(String), 2, headSha, 'Delivery verification lease heartbeat failed');
   });
 
   test('reconciles a verification workspace after status publication was lost', async () => {
@@ -406,7 +580,7 @@ describe('ImplementationService', () => {
     expect(ensureVerificationWorkspaceFor).toHaveBeenCalledTimes(1);
     expect(createCommitStatus).toHaveBeenCalledWith(
       'factory', 'payments', headSha, 'success', 'factory/verification', expect.any(String),
-      expect.stringContaining('https://coder.example/api/v2/users/oidc/callback?redirect='), undefined,
+      expect.stringContaining('https://coder.example/api/v2/users/oidc/callback?redirect='), expect.any(AbortSignal),
     );
     expect(createCommitStatus.mock.calls[0]?.[6]).not.toBe('https://verification.example');
     expect(completeVerification).toHaveBeenCalledWith(record.id, expect.any(String), 2, headSha, 'verification-1');
@@ -445,7 +619,7 @@ describe('ImplementationService', () => {
     expect(completeVerification).toHaveBeenCalledWith(record.id, expect.any(String), 4, headSha, 'verification-advanced');
   });
 
-  test('projects Forgejo post-merge base SHA when merged_commit_id is absent', async () => {
+  test('does not treat Forgejo post-merge base SHA as a merge identity', async () => {
     const mergeSha = 'e'.repeat(40);
     const service = createService({
       operations: mock(async () => []), contributor: mock(async () => null),
@@ -469,7 +643,7 @@ describe('ImplementationService', () => {
 
     const projected = await (service as unknown as { project(context: unknown, identity: unknown): Promise<{ mergedSha: string }> }).project(context, identity);
 
-    expect(projected.mergedSha).toBe(mergeSha);
+    expect(projected.mergedSha).toBeNull();
   });
 
   test('rejects merge when the pull head changes after projection', async () => {
@@ -668,6 +842,31 @@ describe('ImplementationService', () => {
     expect(ensureImplementationContributorAccess).toHaveBeenCalledWith(
       'factory', 'payments', pull.head.ref, 'factory-implementation', identity.username, undefined,
     );
+  });
+
+  test('does not issue a late Forgejo grant after deprovisioning wins the user lock', async () => {
+    const operation = {
+      idempotencyKey: 'operation-1', deliveryId: record.id, factoryUserId: identity.subject, kind: 'coder-chat-create',
+      state: 'pending', leaseOwner: null, leaseExpiresAt: null, externalId: null, error: null,
+      createdAt: new Date(), updatedAt: new Date(),
+    };
+    const ensureImplementationContributorAccess = mock(async () => undefined);
+    const service = createService({
+      reserveDelivery: mock(async () => ({ delivery: record, created: true })),
+      isContributor: mock(async () => false), addContributor: mock(async () => undefined),
+      withActiveContributorGrant: mock(async () => { throw Object.assign(new Error('Factory user is deprovisioned'), { status: 403 }); }),
+      activeOperation: mock(async () => null),
+      reserveOperation: mock(async () => operation), touchDelivery: mock(async () => undefined), operations: mock(async () => [operation]),
+    }, { ensureImplementationContributorAccess });
+    const internals = service as unknown as Record<string, ReturnType<typeof mock>>;
+    const pull = {
+      number: 11, state: 'open', title: '', body: '', html_url: 'https://forgejo.example/pulls/11', draft: false,
+      merged: false, mergeable: true, head: { label: '', ref: 'factory/requirement-7-fixed', sha: 'a'.repeat(40) }, base: { label: '', ref: 'main', sha: 'd'.repeat(40) },
+    };
+    internals.ensureInitialDelivery = mock(async () => ({ record, application, branch: pull.head.ref, pull, marker: {} }));
+
+    await expect(service.start(7, application.id, identity)).rejects.toThrow('Factory user is deprovisioned');
+    expect(ensureImplementationContributorAccess).not.toHaveBeenCalled();
   });
 
   test('reserves a handover operation without blocking the start request on dispatch', async () => {
@@ -1007,7 +1206,7 @@ describe('ImplementationService', () => {
     expect((await project(context, identity)).phase).toBe('ready-to-merge');
   });
 
-  test('reads reviewer names from new and legacy review attribution', async () => {
+  test('reads reviewer names from review attribution', async () => {
     const headSha = 'a'.repeat(40);
     const defaultSha = 'd'.repeat(40);
     const pull = {
@@ -1019,8 +1218,7 @@ describe('ImplementationService', () => {
       {
         listCommitStatuses: mock(async () => []),
         listPullReviews: mock(async () => [
-          { id: 1, state: 'COMMENT', body: 'Reviewed in Agentic Software Factory by Legacy Reviewer (issuer#legacy).', user: { login: 'legacy-login' }, commit_id: headSha, submitted_at: '2026-08-28T10:00:00Z' },
-          { id: 2, state: 'COMMENT', body: 'Reviewed in Agentic Software Factory by Current Reviewer (issuer#current).', user: { login: 'current-login' }, commit_id: headSha, submitted_at: '2026-08-28T10:01:00Z' },
+          { id: 1, state: 'COMMENT', body: 'Reviewed in Agentic Software Factory by Current Reviewer (issuer#current).', user: { login: 'current-login' }, commit_id: headSha, submitted_at: '2026-08-28T10:01:00Z' },
         ]),
       } as never,
       { getProjectBranchHead: mock(async () => defaultSha) } as never,
@@ -1031,7 +1229,7 @@ describe('ImplementationService', () => {
     const projected = await (service as unknown as { project(...args: unknown[]): Promise<{ reviews: Array<{ reviewer: string }> }> })
       .project({ record, application, branch: 'branch', pull, marker: {} }, identity);
 
-    expect(projected.reviews.map((review) => review.reviewer)).toEqual(['Legacy Reviewer', 'Current Reviewer']);
+    expect(projected.reviews.map((review) => review.reviewer)).toEqual(['Current Reviewer']);
   });
 });
 
@@ -1069,7 +1267,13 @@ function createService(
       ensureImplementationContributorAccess: mock(async () => undefined),
       ...forgejo,
     } as never,
-    { getProjectBranchHead: mock(async () => 'd'.repeat(40)) } as never,
+    {
+      getProjectBranchHead: mock(async () => 'd'.repeat(40)),
+      getProjectCommit: mock(async (_owner: string, _repository: string, sha: string) => ({
+        sha,
+        parents: [{ sha: 'd'.repeat(40) }, { sha: 'a'.repeat(40) }],
+      })),
+    } as never,
     {} as never,
     'https://forgejo.example',
     'factory-implementation',

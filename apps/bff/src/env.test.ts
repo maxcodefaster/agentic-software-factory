@@ -30,6 +30,12 @@ const required = {
   CODER_OIDC_CLIENT_ID: 'agentic-software-factory-coder',
   CODER_OIDC_CLIENT_SECRET: 'coder-client-secret',
   CODER_OIDC_REDIRECT_URIS: 'https://coder.example/api/v2/users/oidc/callback',
+  CODER_OIDC_POST_LOGOUT_REDIRECT_URIS: 'https://coder.example',
+  FORGEJO_OIDC_CLIENT_ID: 'agentic-software-factory-forgejo',
+  FORGEJO_OIDC_CLIENT_SECRET: 'forgejo-client-secret',
+  FORGEJO_OIDC_REDIRECT_URIS: 'https://forgejo.example/user/oauth2/Factory/callback',
+  FORGEJO_OIDC_POST_LOGOUT_REDIRECT_URIS: 'https://forgejo.example',
+  FORGEJO_OIDC_COMPATIBILITY_MAJOR: '15',
   FACTORY_CODER_VERIFICATION_OWNER_ID: 'c4d818e5-08fb-418a-96f5-1c31629c9690',
   FACTORY_CODER_STAGING_OWNER_ID: '0137501a-b341-407c-b435-f7db8dbbef61',
   CODER_MCP_URL: 'https://factory.example/mcp',
@@ -41,7 +47,7 @@ describe('runtime environment', () => {
       host: '0.0.0.0',
       port: 8080,
       forgejo: { baseUrl: 'https://forgejo.example', publicUrl: 'https://forgejo.example', reviewToken: 'review-token', implementationUser: 'factory-implementation', reviewUser: 'factory-review', cloneUser: 'factory-clone', humanTeam: 'factory-users', authorizedOwners: ['factory'], branch: 'main' },
-      coder: { baseUrl: 'https://coder.example', token: 'coder-token', verificationOwnerId: required.FACTORY_CODER_VERIFICATION_OWNER_ID, verificationOwner: 'factory-verification', stagingOwnerId: required.FACTORY_CODER_STAGING_OWNER_ID, stagingOwner: 'factory-stage' },
+      coder: { baseUrl: 'https://coder.example', token: 'coder-token', verificationOwnerId: required.FACTORY_CODER_VERIFICATION_OWNER_ID, verificationOwner: 'factory-verification', stagingOwnerId: required.FACTORY_CODER_STAGING_OWNER_ID, stagingOwner: 'factory-stage', restrictedAppSharing: 'authenticated' },
       allowedOrigins: ['https://factory.example'],
       trustedProxyCidrs: [],
       auth: { mode: 'local', issuer: 'https://factory.example', requiredGroup: 'tenant-factory' },
@@ -94,6 +100,40 @@ describe('runtime environment', () => {
     }).trustedProxyCidrs).toEqual(['10.0.0.0/8', '2001:db8::/32']);
     expect(() => loadRuntimeConfig({ ...required, TRUSTED_PROXY_CIDRS: '10.0.0.0/99' }))
       .toThrow('invalid trusted proxy CIDR');
+  });
+
+  test('requires verified PostgreSQL TLS, trusted proxies, and controlled egress in production', () => {
+    const production = {
+      ...required,
+      FACTORY_ENVIRONMENT: 'production',
+      DATABASE_URL: 'postgres://factory:secret@db/factory?sslmode=verify-full',
+      DATABASE_TLS_CA: '-----BEGIN CERTIFICATE-----\nproduction-ca\n-----END CERTIFICATE-----',
+      TRUSTED_PROXY_CIDRS: '10.20.0.0/16',
+      HTTPS_PROXY: 'http://egress-proxy.factory-egress.svc.cluster.local:3128',
+      FACTORY_CODER_AUTHENTICATED_APP_SCOPE_ACKNOWLEDGEMENT: 'deployment-wide',
+    };
+    expect(loadRuntimeConfig(production)).toMatchObject({
+      databaseUrl: production.DATABASE_URL,
+      databaseTlsCa: production.DATABASE_TLS_CA,
+      trustedProxyCidrs: ['10.20.0.0/16'],
+    });
+    expect(() => loadRuntimeConfig({ ...production, DATABASE_URL: required.DATABASE_URL })).toThrow('sslmode=verify-full');
+    expect(() => loadRuntimeConfig({ ...production, DATABASE_TLS_CA: '' })).toThrow('DATABASE_TLS_CA');
+    expect(() => loadRuntimeConfig({ ...production, TRUSTED_PROXY_CIDRS: '' })).toThrow('TRUSTED_PROXY_CIDRS');
+    expect(() => loadRuntimeConfig({ ...production, HTTPS_PROXY: undefined })).toThrow('HTTPS_PROXY');
+    expect(() => loadRuntimeConfig({ ...production, CODER_OIDC_POST_LOGOUT_REDIRECT_URIS: '' })).toThrow('CODER_OIDC_POST_LOGOUT_REDIRECT_URIS');
+    expect(() => loadRuntimeConfig({ ...production, FORGEJO_OIDC_POST_LOGOUT_REDIRECT_URIS: '' })).toThrow('FORGEJO_OIDC_POST_LOGOUT_REDIRECT_URIS');
+    expect(() => loadRuntimeConfig({ ...production, FORGEJO_OIDC_POST_LOGOUT_REDIRECT_URIS: 'https://other.example' })).toThrow('production public URL');
+    expect(() => loadRuntimeConfig({ ...production, FACTORY_CODER_AUTHENTICATED_APP_SCOPE_ACKNOWLEDGEMENT: '' })).toThrow('deployment-wide');
+    expect(loadRuntimeConfig({
+      ...production,
+      FACTORY_CODER_RESTRICTED_APP_SHARING: 'owner',
+      FACTORY_CODER_AUTHENTICATED_APP_SCOPE_ACKNOWLEDGEMENT: '',
+    }).coder.restrictedAppSharing).toBe('owner');
+  });
+
+  test('keeps insecure PostgreSQL available only in explicit local mode', () => {
+    expect(loadRuntimeConfig({ ...required, FACTORY_ENVIRONMENT: 'local' }).databaseTlsCa).toBeUndefined();
   });
 
   test('loads the one local bootstrap admin from local auth credentials', () => {

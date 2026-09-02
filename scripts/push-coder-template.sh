@@ -44,11 +44,12 @@ set -- templates push agentic-software-factory --directory - --yes \
     --variable staging_populates_cache="${FACTORY_STAGING_POPULATES_CACHE:-false}" \
     --variable verification_owner="${FACTORY_CODER_VERIFICATION_OWNER:-factory-verification}" \
     --variable staging_owner="${FACTORY_CODER_STAGING_OWNER:-factory-stage}" \
+    --variable restricted_app_sharing="${FACTORY_CODER_RESTRICTED_APP_SHARING:-authenticated}" \
     --variable default_repository_url="$default_repository_url" \
     --variable default_repository_ref="$FACTORY_DEFAULT_REPOSITORY_REF"
 
 if [ "${FACTORY_TEMPLATE_PUSH_DRY_RUN:-false}" = true ]; then
-  printf 'template=agentic-software-factory\nenvbuilder_image=%s\nclone_image=%s\ncoder_image=%s\nrepository_origin=%s\nstorage_class=%s\nclone_git_secret=%s\ngit_ca_secret=%s\nverification_owner=%s\nstaging_owner=%s\n' \
+  printf 'template=agentic-software-factory\nenvbuilder_image=%s\nclone_image=%s\ncoder_image=%s\nrepository_origin=%s\nstorage_class=%s\nclone_git_secret=%s\ngit_ca_secret=%s\nverification_owner=%s\nstaging_owner=%s\nrestricted_app_sharing=%s\n' \
     "${FACTORY_ENVBUILDER_IMAGE:-ghcr.io/coder/envbuilder@sha256:$CODER_ENVBUILDER_DIGEST}" \
     "${FACTORY_CLONE_IMAGE:-docker.io/alpine/git@sha256:c0280cf9572316299b08544065d3bf35db65043d5e3963982ec50647d2746e26}" \
     "${FACTORY_CODER_IMAGE:-ghcr.io/coder/coder@sha256:$CODER_SERVER_DIGEST}" \
@@ -57,7 +58,8 @@ if [ "${FACTORY_TEMPLATE_PUSH_DRY_RUN:-false}" = true ]; then
     "${FACTORY_CLONE_GIT_SECRET:-factory-forgejo-clone}" \
     "${FACTORY_GIT_CA_SECRET:-factory-ca}" \
     "${FACTORY_CODER_VERIFICATION_OWNER:-factory-verification}" \
-    "${FACTORY_CODER_STAGING_OWNER:-factory-stage}"
+    "${FACTORY_CODER_STAGING_OWNER:-factory-stage}" \
+    "${FACTORY_CODER_RESTRICTED_APP_SHARING:-authenticated}"
   exit
 fi
 

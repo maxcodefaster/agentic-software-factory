@@ -11,7 +11,7 @@ import * as schema from './schema';
 
 export type Database = ReturnType<typeof drizzle<typeof schema>>;
 
-export function createDatabase(databaseUrl: string): {
+export function createDatabase(databaseUrl: string, tlsCa?: string): {
   db: Database;
   sql: postgres.Sql;
 } {
@@ -22,6 +22,7 @@ export function createDatabase(databaseUrl: string): {
     idle_timeout: 30,
     connect_timeout: 10,
     prepare: true,
+    ...(tlsCa ? { ssl: { ca: tlsCa, rejectUnauthorized: true } } : {}),
   });
   return { db: drizzle({ client: sql, schema }), sql };
 }

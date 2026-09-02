@@ -9,10 +9,26 @@ import de from '../../../../public/i18n/de.json';
 import en from '../../../../public/i18n/en.json';
 
 describe('translations', () => {
+  const retiredNamespaces = ['theme', 'settings', 'system', 'admin', 'notifications', 'notif'];
+
   test.each([
     ['en', en, 'Import a private Forgejo repository with developer and verification Dev Container configurations and a process-compose contract.'],
     ['de', de, 'Importiere ein privates Forgejo-Repository mit Dev-Container-Konfigurationen fuer Entwicklung und Verifizierung sowie einem process-compose-Vertrag.'],
   ])('%s describes the native repository contract', (_locale, translations, expected) => {
     expect(translations.applications.onboarding.intro).toBe(expected);
   });
+
+  test('keeps locale keys equal and retired namespaces absent', () => {
+    expect(flattenKeys(de)).toEqual(flattenKeys(en));
+    for (const translations of [en, de]) {
+      for (const namespace of retiredNamespaces) expect(translations).not.toHaveProperty(namespace);
+    }
+  });
 });
+
+function flattenKeys(value: object, prefix = ''): string[] {
+  return Object.entries(value).flatMap(([key, child]) => {
+    const path = prefix ? `${prefix}.${key}` : key;
+    return child && typeof child === 'object' ? flattenKeys(child, path) : [path];
+  }).sort();
+}

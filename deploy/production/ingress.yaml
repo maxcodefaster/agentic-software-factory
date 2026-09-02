@@ -15,7 +15,7 @@ metadata:
 spec:
   ingressClassName: nginx
   tls:
-    - hosts: [factory.example.invalid]
+    - hosts: [factory.example.invalid, coder.example.invalid, forgejo.example.invalid]
       secretName: factory-tls
   rules:
     - host: factory.example.invalid
@@ -23,6 +23,26 @@ spec:
         paths:
           - path: /
             pathType: Prefix
+            backend:
+              service:
+                name: agentic-software-factory
+                port:
+                  name: http
+    - host: coder.example.invalid
+      http:
+        paths:
+          - path: /__factory/logout
+            pathType: Exact
+            backend:
+              service:
+                name: agentic-software-factory
+                port:
+                  name: http
+    - host: forgejo.example.invalid
+      http:
+        paths:
+          - path: /__factory/logout
+            pathType: Exact
             backend:
               service:
                 name: agentic-software-factory

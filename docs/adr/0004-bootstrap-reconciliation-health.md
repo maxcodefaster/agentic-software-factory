@@ -39,8 +39,9 @@ to Coder workspaces or repairs state. Database and Forgejo failures make the BFF
 unready. Individual System transitions, repair states, failed staging, registry
 load errors, and stale projections are degradation while any registered System
 remains usable. If registered Systems exist and none are usable, the BFF is
-unready. `/statusz` reports the counts and affected System IDs as well as optional
-capabilities. A missing Coder model makes the AI interview unavailable but does
+unready. `/statusz` reports aggregate System status and counts, onboarding,
+registry, staging, and optional capabilities. It does not report System IDs. A
+missing Coder model makes the AI interview unavailable but does
 not make the core service unready. Stock Coder administration owns model
 credentials and default-model selection.
 

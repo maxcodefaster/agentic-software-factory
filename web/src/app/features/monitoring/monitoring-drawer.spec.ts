@@ -41,6 +41,7 @@ describe('MonitoringDrawer', () => {
     fixture.detectChanges();
 
     expect(fixture.nativeElement.textContent).toContain('verification-app');
+    expect(fixture.nativeElement.textContent).toContain('Verification');
   });
 
   it('refreshes workspace monitoring', () => {

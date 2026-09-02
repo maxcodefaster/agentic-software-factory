@@ -47,6 +47,7 @@ function fixture() {
       if (record) Object.assign(record, { workspace: value, updatedAt: new Date() });
     }),
     retry: mock(async () => {
+      if (leased) return;
       if (record) Object.assign(record, { phase: 'pending', attempts: 0, lastError: null, leaseOwner: null, leaseExpiresAt: null });
     }),
     claim: mock(async () => {
@@ -55,6 +56,8 @@ function fixture() {
       Object.assign(record, { phase: 'provisioning', health: 'initializing', attempts: record.attempts + 1 });
       return record.attempts;
     }),
+    renew: mock(async () => leased),
+    renewDeletion: mock(async () => leased),
     succeed: mock(async (_id: string, _owner: string, _generation: number, sha: string, value: typeof workspace) => {
       leased = false;
       Object.assign(record, { currentSha: sha, phase: 'healthy', health: 'healthy', workspace: value, lastError: null, updatedAt: new Date() });
@@ -89,7 +92,12 @@ describe('StagingReconciler', () => {
   test('uses the persistent lease to coalesce reconciliation across replicas', async () => {
     let resolve!: (value: typeof workspace) => void;
     const result = new Promise<typeof workspace>((done) => { resolve = done; });
-    const ensureStagingWorkspace = mock(() => result);
+    let provisioningStarted!: () => void;
+    const started = new Promise<void>((done) => { provisioningStarted = done; });
+    const ensureStagingWorkspace = mock(() => {
+      provisioningStarted();
+      return result;
+    });
     const { store } = fixture();
     const metrics = { measure: async (_input: unknown, action: () => Promise<unknown>) => action() };
     const coder = { ensureStagingWorkspace, stagingWorkspaceById: async () => workspace };
@@ -97,12 +105,57 @@ describe('StagingReconciler', () => {
     const secondReplica = new StagingReconciler({ list: async () => [application], get: async () => application } as never, coder as never, store as never, metrics as never, 'template', 'workspaces');
 
     const first = firstReplica.reconcile(application);
-    await Promise.resolve();
+    await started;
     await secondReplica.reconcile(application);
     expect(ensureStagingWorkspace).toHaveBeenCalledTimes(1);
     resolve(workspace);
     await first;
     expect(await secondReplica.snapshot(application.id)).toMatchObject({ reconciling: false, error: null, workspace: { id: 'staging-1' } });
+  });
+
+  test('aborts provisioning when lease renewal is lost', async () => {
+    const { store } = fixture();
+    store.renew.mockImplementation(async () => false);
+    let observedSignal: AbortSignal | undefined;
+    const ensureStagingWorkspace = mock(async (_input: unknown, signal?: AbortSignal) => {
+      observedSignal = signal;
+      await new Promise<void>((_resolve, reject) => signal?.addEventListener('abort', () => reject(signal.reason), { once: true }));
+      return workspace;
+    });
+    const reconciler = new StagingReconciler(
+      { list: async () => [application], get: async () => application } as never,
+      { ensureStagingWorkspace } as never, store as never,
+      { measure: async (_input: unknown, action: () => Promise<unknown>) => action() } as never,
+      'template', 'workspaces',
+    );
+    Object.assign(reconciler as unknown as { heartbeatMs: number }, { heartbeatMs: 1 });
+
+    await expect(reconciler.reconcile(application)).rejects.toThrow('Staging reconciliation lease was lost');
+
+    expect(observedSignal?.aborted).toBe(true);
+    expect(store.succeed).not.toHaveBeenCalled();
+    expect(store.fail).toHaveBeenCalledWith(application.id, expect.any(String), 1, application.defaultSha, 'Staging reconciliation lease was lost');
+  });
+
+  test('manual retry does not clear an active staging reconciliation', async () => {
+    let release!: (value: typeof workspace) => void;
+    const provisioning = new Promise<typeof workspace>((resolve) => { release = resolve; });
+    const { store, record } = fixture();
+    const reconciler = new StagingReconciler(
+      { list: async () => [application], get: async () => application } as never,
+      { ensureStagingWorkspace: async () => provisioning } as never, store as never,
+      { measure: async (_input: unknown, action: () => Promise<unknown>) => action() } as never,
+      'template', 'workspaces',
+    );
+
+    const active = reconciler.reconcile(application);
+    await Promise.resolve();
+    await reconciler.retry(application.id);
+
+    expect(record()).toMatchObject({ phase: 'provisioning' });
+    release(workspace);
+    await active;
+    expect(record()).toMatchObject({ phase: 'healthy' });
   });
 
   test('persists a failed new SHA without relabeling the previous workspace', async () => {

@@ -19,7 +19,7 @@ export interface FactorySession {
 export function createSessionHelpers(auth: FactoryAuth) {
   return {
     async get(request: Request): Promise<FactorySession | null> {
-      const result = await auth.api.getSession({ headers: request.headers });
+      const result = await auth.api.getSession({ headers: request.headers, query: { disableCookieCache: true } });
       if (!result) return null;
       const raw = result.user as typeof result.user & {
         preferredUsername?: string;

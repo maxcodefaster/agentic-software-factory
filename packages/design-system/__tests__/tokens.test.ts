@@ -7,7 +7,7 @@
 import { describe, expect, it } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { renderThemeCss, renderTokensCss } from '../scripts/generate';
-import { brandMint, brandModes, brandYellow } from '../src/tokens';
+import { brandModes } from '../src/tokens';
 
 /**
  * Drift guard: the committed CSS artefacts must equal what the generator emits
@@ -30,11 +30,6 @@ describe('design tokens are the single source of truth', () => {
   it('defines complete light and dark contracts for each consumer', () => {
     expect(Object.keys(brandModes.light.spartan)).toEqual(Object.keys(brandModes.dark.spartan));
     expect(Object.keys(brandModes.light.auth)).toEqual(Object.keys(brandModes.dark.auth));
-  });
-
-  it('keeps yellow as an exact compatibility alias for the mint ramp', () => {
-    expect(brandYellow).toBe(brandMint);
-    expect(renderTokensCss()).toContain('--brand-yellow-500: var(--brand-mint-500);');
   });
 
   it('maps every portal Spartan variable to the generated mode contracts', () => {

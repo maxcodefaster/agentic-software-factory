@@ -6,13 +6,13 @@
 
 import type { Identity } from '../server/types';
 import type { Database } from '../db';
-import type { ReturnTypeOfCreateAuthCore } from './types';
+import type { createAuthCore } from './index';
 import type { FactoryAuthConfig } from './config';
 import { authUiConfigSchema, consentContextSchema, type AuthUiConfig, type ConsentContext } from '@agentic-software-factory/api-contracts/auth';
 import { logout } from './session';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 
-export type AuthCore = ReturnTypeOfCreateAuthCore;
+export type AuthCore = Awaited<ReturnType<typeof createAuthCore>>;
 
 const MCP_SCOPE = 'mcp:call';
 const MCP_TOKEN_MAX_AGE_SECONDS = 15 * 60;
@@ -58,7 +58,15 @@ export class FactoryAuthService {
 
   async authenticate(request: Request): Promise<Identity | null> {
     const session = await this.core.sessions.get(request);
-    return session ? identity(this.config.issuer, session.user) : null;
+    if (!session) return null;
+    if (this.db) {
+      const active = await this.db.query.user.findFirst({
+        columns: { deprovisionedAt: true },
+        where: (table, { eq }) => eq(table.id, session.user.id),
+      });
+      if (!active || active.deprovisionedAt) return null;
+    }
+    return identity(this.config.issuer, session.user);
   }
 
   async authenticateMcp(request: Request): Promise<string | null> {
@@ -77,7 +85,7 @@ export class FactoryAuthService {
     const token = await response.json().catch(() => null) as Record<string, unknown> | null;
     const now = Math.floor(Date.now() / 1_000);
     const scopes = typeof token?.scope === 'string' ? token.scope.split(' ') : [];
-    return token?.active === true
+    const subject = token?.active === true
       && token.client_id === client.clientId
       && token.agentic_software_factory_audience === `${this.config.issuer}/mcp`
       && typeof token.sub === 'string' && token.sub.length > 0
@@ -87,6 +95,12 @@ export class FactoryAuthService {
       && scopes.includes(MCP_SCOPE)
       ? token.sub
       : null;
+    if (!subject || !this.db) return subject;
+    const active = await this.db.query.user.findFirst({
+      columns: { deprovisionedAt: true },
+      where: (table, { eq }) => eq(table.id, subject),
+    });
+    return active && !active.deprovisionedAt ? subject : null;
   }
 
   async handle(_action: 'logout', request: Request): Promise<Response> {
@@ -132,7 +146,7 @@ export class FactoryAuthService {
         redirect: 'manual',
         signal: logoutSignal(request.signal, this.logoutTimeoutMs),
       }).catch(() => null);
-      if (!response || !downstreamSuccess(response)) return logoutFailure('Forgejo', headers);
+      if (!response || !(response.ok || response.status === 302 || response.status === 303)) return logoutFailure('Forgejo', headers);
       response.headers.getSetCookie().forEach((value) => headers.append('set-cookie', value));
     }
     headers.set('location', ticket.next);

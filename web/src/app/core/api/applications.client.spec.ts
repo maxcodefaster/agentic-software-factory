@@ -25,8 +25,29 @@ describe('ApplicationsClient', () => {
     const register = http.expectOne('/api/v1/applications/onboarding/register');
     expect(register.request.method).toBe('POST');
     expect(register.request.body).toEqual({ repository: 'customer-portal', team: 'factory' });
-    register.flush({ id: 'factory/customer-portal', name: 'Customer Portal', description: '', repositoryUrl: 'https://git/customer-portal' });
+    register.flush({ id: 'factory/customer-portal', team: 'factory', name: 'Customer Portal', description: '', repositoryUrl: 'https://git/customer-portal' });
 
+    http.verify();
+  });
+
+  it('rejects malformed onboarding repository, attempt, registration, and remediation responses', () => {
+    const client = TestBed.inject(ApplicationsClient);
+    const http = TestBed.inject(HttpTestingController);
+    const errors: unknown[] = [];
+
+    client.listOnboardingRepositories().subscribe({ error: (error) => errors.push(error) });
+    http.expectOne('/api/v1/applications/onboarding/repositories').flush({ repositories: [{ name: 17 }] });
+
+    client.listOnboardingAttempts().subscribe({ error: (error) => errors.push(error) });
+    http.expectOne('/api/v1/applications/onboarding/attempts').flush({ attempts: [{ systemId: 'factory/app' }] });
+
+    client.register({ repository: 'app', team: 'factory' }).subscribe({ error: (error) => errors.push(error) });
+    http.expectOne('/api/v1/applications/onboarding/register').flush({ id: 'factory/app' });
+
+    client.createRemediation('factory/app').subscribe({ error: (error) => errors.push(error) });
+    http.expectOne('/api/v1/applications/factory%2Fapp/remediation').flush({ pullNumber: '7', pullUrl: '/pulls/7', branch: 'factory/remediate' });
+
+    expect(errors).toHaveLength(4);
     http.verify();
   });
 

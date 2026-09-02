@@ -4,7 +4,14 @@
  * All software distributed under the RPL is provided strictly on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED, AND LICENSOR HEREBY DISCLAIMS ALL SUCH WARRANTIES, INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT, OR NON-INFRINGEMENT. See the RPL for specific language governing rights and limitations under the RPL.
  */
 
-import type { MonitoringResponse, WorkspaceKind } from '@agentic-software-factory/api-contracts/monitoring';
+import type { MonitoringResponse } from '@agentic-software-factory/api-contracts/monitoring';
+import type {
+  InterviewAnswer,
+  InterviewQuestion,
+  PendingInterviewOperation,
+  RequirementProposal,
+  RequirementSpec,
+} from '@agentic-software-factory/api-contracts/kanban';
 
 export interface Identity {
   issuer: string;
@@ -24,27 +31,6 @@ export interface RequestScope {
   repository?: { owner: string; name: string; systemId: string };
 }
 
-export interface RequirementSpec {
-  goal: string;
-  users: string[];
-  userStories: string[];
-  acceptanceCriteria: string[];
-  nonFunctionalRequirements: string[];
-  moscow: { must: string[]; should: string[]; could: string[] };
-  openQuestions: string[];
-  nonGoals: string[];
-}
-
-export interface InterviewQuestion {
-  id: string;
-  header: string | null;
-  prompt: string;
-  type: 'single' | 'multi' | 'text';
-  options: Array<{ value: string; label: string; description: string | null }>;
-  allowCustom: boolean;
-  hint: string | null;
-}
-
 export interface InterviewState {
   version: number;
   runId: string;
@@ -59,24 +45,7 @@ export interface InterviewState {
   done: boolean;
 }
 
-export interface PendingInterviewOperation {
-  operationId: string;
-  answer: InterviewAnswer;
-  payload: string;
-  previousQuestionId: string;
-  expectedVersion: number;
-  phase: 'answer' | 'proposal';
-  createdAt: string;
-  createdBy: string;
-  failure?: { message: string; retryable: boolean; failedAt: string };
-}
-
-export interface InterviewAnswer {
-  questionId: string;
-  expectedVersion: number;
-  selected: string[];
-  customText: string;
-}
+export type { InterviewAnswer, InterviewQuestion, PendingInterviewOperation, RequirementSpec };
 
 export interface Card {
   number: number;
@@ -126,7 +95,7 @@ export interface WorkspaceSummary {
   available: boolean;
 }
 
-export type { MonitoringResponse, WorkspaceKind };
+export type { MonitoringResponse };
 
 export interface ForgejoService {
   ready(signal: AbortSignal): Promise<void>;
@@ -164,6 +133,7 @@ export interface ForgejoService {
     retake: boolean,
     binding: InterviewBinding,
     pending: InterviewQuestion,
+    expectedVersion: number,
     scope: RequestScope,
   ): Promise<InterviewState>;
   prepareInterviewAnswer(
@@ -198,6 +168,7 @@ export interface ForgejoService {
     actor: string,
     note: string,
     next: InterviewQuestion,
+    expectedVersion: number,
     scope: RequestScope,
   ): Promise<InterviewState>;
   getIssue(number: number, scope: RequestScope): Promise<{ title: string; body: string; status: string; team?: string; applications?: Array<{ id: string; name: string }> }>;
@@ -207,7 +178,6 @@ export interface ForgejoService {
 export interface CoderService {
   summary(scope: RequestScope): Promise<WorkspaceSummary>;
   developerSummary(scope: RequestScope): Promise<WorkspaceSummary>;
-  systemSummary(repositoryUrl: string, signal?: AbortSignal): Promise<WorkspaceSummary>;
   ensureDeveloperWorkspace(application: import('../applications/catalog').ApplicationDefinition, scope: RequestScope): Promise<Workspace>;
   developerWorkspaceById(application: import('../applications/catalog').ApplicationDefinition, workspaceId: string, scope: RequestScope): Promise<Workspace>;
   chatCapability(scope: RequestScope): Promise<{ available: boolean; reason?: string; chatUrl?: string }>;
@@ -244,9 +214,7 @@ export interface InterviewBinding {
   proposalNonce: string;
 }
 
-export interface ProposalProvenance extends InterviewBinding {
-  source: 'coder-ai';
-}
+export type ProposalProvenance = NonNullable<RequirementProposal['provenance']>;
 
 export type AuthAction = 'logout';
 
@@ -277,6 +245,7 @@ export interface ServerServices {
     & Partial<Pick<import('../applications/registry').ApplicationRegistry, 'listRegistrations' | 'getRegistration'>>;
   staging?: Pick<import('../applications/staging').StagingReconciler, 'snapshot' | 'reconcileById' | 'retry'>;
   listUsers(query: UserDirectoryQuery): Promise<import('@agentic-software-factory/api-contracts/users').UsersResponse>;
+  deprovisionUser?(userId: string): Promise<import('../auth/deprovision').UserDeprovisionResult | null>;
   applicationOnboarding?: {
     availableRepositories(teams?: readonly string[], signal?: AbortSignal): Promise<import('../applications/onboarding').OnboardingRepository[]>;
     attempts(): Promise<import('../applications/onboarding').OnboardingAttempt[]>;

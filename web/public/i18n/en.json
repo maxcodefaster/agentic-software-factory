@@ -192,12 +192,6 @@
     "close": "Close",
     "delete": "Delete"
   },
-  "theme": {
-    "toLight": "Switch to light theme",
-    "toDark": "Switch to dark theme",
-    "light": "Light theme",
-    "dark": "Dark theme"
-  },
   "locale": {
     "label": "Language",
     "switchTo": "Switch to German",
@@ -285,18 +279,6 @@
     },
     "release": {"open":"Forgejo releases"}
   },
-  "settings": {
-    "account": "Account",
-    "connectedSourcesDesc": "Connected sources — linked automatically through your account.",
-    "connected": "Connected",
-    "notConnected": "Not connected",
-    "forgejoDesc": "Connected automatically through your account.",
-    "signOut": "Sign out",
-    "pleaseSignIn": "Please sign in.",
-    "adminLogin": "Admin login (temporary)",
-    "password": "Password",
-    "loginFailed": "Sign-in failed — check email or password."
-  },
   "team": {
     "section": "Collaboration",
     "title": "Manage team",
@@ -328,42 +310,6 @@
     "errCreate": "Team could not be created.",
     "closeMenu": "Close team menu",
     "noActiveTeam": "No team"
-  },
-  "system": {
-    "none": "No system",
-    "new": "New system"
-  },
-  "admin": {
-    "platform": "Platform",
-    "noAccess": "No access — this area is reserved for platform admins.",
-    "model": {
-      "title": "AI model",
-      "desc": "Which model the platform uses for all AI features. API keys stay in the cluster (secret) — only the model is chosen here. A switch takes effect immediately, without a deploy.",
-      "loading": "Loading model configuration …",
-      "active": "Active model",
-      "keySet": "Key configured",
-      "keyNotSet": "No key configured",
-      "noProvider": "No provider configured — add an API key (secret) to switch models.",
-      "selectModel": "Choose model",
-      "testModel": "Test model",
-      "activate": "Activate",
-      "probeOk": "Model responds (structured output ok)",
-      "switched": "Switched",
-      "codingAgent": "Coding agent (opencode):",
-      "testFailed": "Test failed.",
-      "switchFailed": "Switch failed.",
-      "configLoadFailed": "Model configuration could not be loaded."
-    },
-    "prompts": {
-      "title": "Prompts",
-      "desc": "The active prompt pack — the model-facing prompt profile (language + tuning) used by the agents and coding tickets. English is the neutral default; German ships as a full pack.",
-      "loading": "Loading prompt packs …",
-      "select": "Prompt pack",
-      "activate": "Switch pack",
-      "switched": "Pack switched.",
-      "switchFailed": "Could not switch the prompt pack.",
-      "configLoadFailed": "Could not load the prompt configuration."
-    }
   },
   "board": {
     "ticketNotFound": "Ticket #{{number}} was not found.",
@@ -455,12 +401,6 @@
     "moveBackQuestion": "Move back to {{column}}?",
     "moveBackTo": "Move back to {{column}}",
     "moveBackHistory": "The existing history is retained."
-  },
-  "notifications": {
-    "title": "Notifications",
-    "new": "{{count}} new",
-    "markAllRead": "Mark all read",
-    "empty": "No notifications."
   },
   "card": {
     "answerCount": "{{count}} previous answers",
@@ -631,26 +571,5 @@
     "applicationsHint": "Choose all affected applications.",
     "noApplications": "This team has no applications yet.",
     "saveApplications": "Save applications"
-  },
-  "notif": {
-    "pr": {
-      "started": "AI implementation started: {{card}}",
-      "preview": "Preview live: {{card}}",
-      "ready": "Ready for review: {{card}}",
-      "draft": "Build not green: {{card}}",
-      "failed": "Build failed: {{card}}",
-      "merged": "Merged: {{card}}",
-      "body": "Target system {{sys}}"
-    },
-    "interview": {
-      "finalizedTitle": "Requirement clarified: {{card}}",
-      "finalizedBody": "The AI interview produced a testable specification — ready for implementation."
-    },
-    "provision": {
-      "creatingTitle": "Building block “{{name}}” is being provisioned",
-      "creatingBody": "{{engine}} — ArgoCD applies the manifest, the operator provisions. Connect your app via the secret “{{secret}}”.",
-      "removingTitle": "Building block “{{name}}” is being removed",
-      "removingBody": "The claim was deleted — ArgoCD removes workloads, volumes and data."
-    }
   }
 }

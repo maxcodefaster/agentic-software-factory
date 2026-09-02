@@ -22,8 +22,8 @@ import {
   errorResponse,
   forgejoDestination,
   issueNumber,
-  legacyApplicationId,
   mapError,
+  persistedApplicationId,
   repositoryScope,
   requestScope,
   requireCapability,
@@ -49,7 +49,6 @@ export function requirementRoutes(
         : new Map();
       const definitions = (await services.applications.list()).filter((item) => item.team === scope.team);
       const names = new Map(definitions.map((item) => [item.id, item.name]));
-      const singleton = definitions.length === 1 ? definitions[0] : null;
       const application = typeof query['application'] === 'string' ? query['application'] : '';
       if (application && !names.has(application)) return errorResponse(404, 'application not found');
       return validateResponse(boardResponseSchema, {
@@ -68,12 +67,11 @@ export function requirementRoutes(
                   ? { url: forgejoDestination(services, card.url) }
                   : {}),
                 applications: (card.applications ?? []).flatMap((item) => {
-                  const canonical = names.has(item.id) ? item.id : singleton && legacyApplicationId(item.id) ? singleton.id : item.id;
-                  return names.has(canonical) ? [{ id: canonical, name: names.get(canonical)! }] : [];
+                  const id = persistedApplicationId(item.id, definitions);
+                  return id ? [{ id, name: names.get(id)! }] : [];
                 }),
               }))
-              .filter((card) => !application || card.applications?.some((item) => item.id === application
-                || (singleton?.id === application && legacyApplicationId(item.id)))),
+              .filter((card) => !application || card.applications?.some((item) => item.id === application)),
           ]),
         ),
       });
@@ -114,6 +112,12 @@ export function requirementRoutes(
       const scope = await repositoryScope(request, identity!, services, requestedApplication ?? body.applicationIds?.[0]);
       if (body.applicationIds && !await applicationIdsBelongToTeam(body.applicationIds, scope.team!, services)) {
         return errorResponse(404, 'application not found');
+      }
+      if (body.title !== undefined || body.body !== undefined) {
+        const current = await services.forgejo.getIssue(issueNumber(params.number), scope);
+        if (current.status === 'implementation' || current.status === 'done') {
+          return errorResponse(409, 'accepted requirements cannot be edited');
+        }
       }
       return services.forgejo.updateRequirement(issueNumber(params.number), body, scope);
     }, { params: numberParams, body: updateRequirementBody })

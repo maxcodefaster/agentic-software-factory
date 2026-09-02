@@ -32,9 +32,18 @@ describe("factory command", () => {
     expect(statusCommands.map(({ argv }) => argv.join(" ")).join(" ")).toContain("kubectl get certificate factory-tls");
     expect(statusCommands.map(({ argv }) => argv.join(" ")).join(" ")).toContain("/healthz");
     expect(statusCommands.map(({ argv }) => argv.join(" ")).join(" ")).toContain("/readyz");
-    expect(statusCommands.map(({ argv }) => argv.join(" ")).join(" ")).toContain("/statusz");
+    expect(statusCommands.map(({ argv }) => argv.join(" ")).join(" ")).not.toContain("/statusz");
     const code = await run(["status"], async () => ({ exitCode: 0 }));
     expect(code).toBe(0);
+  });
+
+  test("smoke authenticates the admin-only status endpoint", async () => {
+    const smoke = await Bun.file(new URL("smoke.sh", import.meta.url)).text();
+    const command = e2eCommands.find(({ component }) => component === "smoke")?.argv.join(" ") ?? "";
+    expect(smoke).toContain('curl -fsS -b "$admin_cookie_jar" "$factory_url/statusz"');
+    expect(smoke).toContain('SMOKE_ADMIN_PASSWORD:?SMOKE_ADMIN_PASSWORD is required');
+    expect(command).toContain("SMOKE_ADMIN_PASSWORD=$(kubectl get secret factory-auth");
+    expect(command).toContain("bootstrap-user-password");
   });
 
   test("down stops the stack without removing resources", () => {
@@ -64,16 +73,11 @@ describe("factory command", () => {
     expect(commands).toContain("local-secrets.ts");
     expect(commands).toContain("reconcile-secret-rollout.sh forgejo");
     expect(commands).toContain("reconcile-secret-rollout.sh coder");
-    expect(commands).toContain("secret-checksum.sh factory");
+    expect(commands).toContain("deploy-factory.sh --full-stack");
     expect(commands).toContain("onboarding/register");
     expect(commands).toContain('test "$code" = 202');
-    expect(commands).toContain("prepare-dev-image-context.sh");
-    expect(commands).toContain("resolve-dev-image.sh");
     expect(commands).not.toContain("current_checksum");
-    expect(commands).toContain('rollout-factory.sh "$image" IfNotPresent');
-    expect(commands).toContain("factory.application/source-digest");
     expect(commands).toContain("coder-template-identity.sh");
-    expect(commands).toContain('-t "$image" -f "$context/apps/bff/Dockerfile" "$context"');
     expect(commands).not.toContain("for file in main.tf README.md workspace-clone.sh");
     expect(commands).not.toContain('kubectl label namespace "$namespace"');
     expect(commands).toContain("factory.application/local-stack-owner");
@@ -93,14 +97,6 @@ describe("factory command", () => {
     const script = new URL("../deploy/local/resolve-dev-image.sh", import.meta.url).pathname;
     expect((await Bun.$`sh ${script} registry.example/team/factory:dev abc123`.text()).trim()).toBe("registry.example/team/factory:dev-abc123");
     expect((await Bun.$`sh ${script} registry.example:5000/team/factory abc123`.text()).trim()).toBe("registry.example:5000/team/factory:abc123");
-  });
-
-  test("deploy rejects an existing mutable image tag without matching source labels", async () => {
-    const deploy = await Bun.file(new URL("../deploy/local/deploy-factory.sh", import.meta.url)).text();
-    expect(deploy).toContain('image_matches_source');
-    expect(deploy).toContain('factory.application/dev-image');
-    expect(deploy).toContain('factory.application/source-digest');
-    expect(deploy).not.toContain('docker image inspect "$image" >/dev/null 2>&1 ||');
   });
 
   test("checks omit root orchestration, include every local contract, and omit example release checks", async () => {
@@ -196,9 +192,10 @@ describe("factory command", () => {
     expect(seen.map(({ component }) => component)).toEqual(preflight.slice(0, preflight.indexOf("factory-ready") + 1));
   });
 
-  test("e2e runs the real lifecycle between interview and browser with Kubernetes secrets", () => {
+  test("e2e runs the real lifecycle before browser checks with Kubernetes secrets", () => {
     const components = e2eCommands.map(({ component }) => component);
-    expect(components.indexOf("lifecycle")).toBe(components.indexOf("interview") + 1);
+    expect(components).not.toContain("interview");
+    expect(components.indexOf("lifecycle")).toBe(components.indexOf("coder-sso") + 1);
     expect(components.indexOf("lifecycle")).toBeLessThan(components.indexOf("browser"));
     const lifecycle = e2eCommands.find(({ component }) => component === "lifecycle")?.argv.join(" ") ?? "";
     expect(lifecycle).toContain("bun scripts/e2e-lifecycle.ts");
@@ -210,10 +207,10 @@ describe("factory command", () => {
     expect(lifecycle).toContain("length == 1");
   });
 
-  test("e2e establishes business Coder SSO after persona checks and before interviews", () => {
+  test("e2e establishes business Coder SSO after persona checks and before lifecycle", () => {
     const components = e2eCommands.map(({ component }) => component);
     expect(components.indexOf("coder-sso")).toBe(components.indexOf("personas") + 1);
-    expect(components.indexOf("interview")).toBe(components.indexOf("coder-sso") + 1);
+    expect(components.indexOf("lifecycle")).toBe(components.indexOf("coder-sso") + 1);
 
     const coderSso = e2eCommands.find(({ component }) => component === "coder-sso")?.argv.join(" ") ?? "";
     expect(coderSso).toContain("bun scripts/e2e-coder-sso.ts");

@@ -46,9 +46,6 @@ export const applicationsResponseSchema = z.object({
 
 export type ApplicationsResponse = z.infer<typeof applicationsResponseSchema>;
 
-export const applicationsQuerySchema = z.object({ team: z.string().min(1).optional() }).strict();
-export type ApplicationsQuery = z.infer<typeof applicationsQuerySchema>;
-
 export const developerWorkspaceSchema = z.object({
   workspaceId: z.string(),
   workspaceUrl: z.string().nullable(),
@@ -79,12 +76,15 @@ export const compatibilityIssueSchema = z.object({
   message: z.string(),
 });
 
+export const onboardingPhaseSchema = z.enum(['validating', 'applying-access', 'applying-policy', 'creating-staging', 'ready', 'retry-wait', 'repair', 'failed', 'reassigning', 'reassigning-access', 'unregistering', 'removed']);
+export type OnboardingPhase = z.infer<typeof onboardingPhaseSchema>;
+
 export const onboardingAttemptSchema = z.object({
   systemId: z.string(),
   team: z.string(),
   repositoryOwner: z.string(),
   repositoryName: z.string(),
-  phase: z.enum(['validating', 'applying-access', 'applying-policy', 'creating-staging', 'ready', 'retry-wait', 'repair', 'failed', 'unregistering', 'removed']),
+  phase: onboardingPhaseSchema,
   targetSha: z.string().nullable(),
   contractVersion: z.number().int().nullable(),
   compatibilityIssues: z.array(compatibilityIssueSchema),
@@ -116,6 +116,13 @@ export const onboardedApplicationSchema = z.object({
   repositoryUrl: z.string(),
 });
 export type OnboardedApplication = z.infer<typeof onboardedApplicationSchema>;
+
+export const remediationResponseSchema = z.object({
+  pullNumber: z.number().int().positive(),
+  pullUrl: z.string(),
+  branch: z.string(),
+}).strict();
+export type RemediationResponse = z.infer<typeof remediationResponseSchema>;
 
 export const developmentToolsSchema = z.object({
   claimsReady: z.boolean(),

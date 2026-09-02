@@ -6,7 +6,7 @@
 @import "./tokens.css";
 
 @theme {
-  /* Brand mint; yellow is a compatibility alias */
+  /* Brand mint */
   --color-brand-mint-50: var(--brand-mint-50);
   --color-brand-mint-100: var(--brand-mint-100);
   --color-brand-mint-200: var(--brand-mint-200);
@@ -18,17 +18,6 @@
   --color-brand-mint-800: var(--brand-mint-800);
   --color-brand-mint-900: var(--brand-mint-900);
   --color-brand-mint: var(--brand-mint-500);
-  --color-brand-yellow-50: var(--brand-yellow-50);
-  --color-brand-yellow-100: var(--brand-yellow-100);
-  --color-brand-yellow-200: var(--brand-yellow-200);
-  --color-brand-yellow-300: var(--brand-yellow-300);
-  --color-brand-yellow-400: var(--brand-yellow-400);
-  --color-brand-yellow-500: var(--brand-yellow-500);
-  --color-brand-yellow-600: var(--brand-yellow-600);
-  --color-brand-yellow-700: var(--brand-yellow-700);
-  --color-brand-yellow-800: var(--brand-yellow-800);
-  --color-brand-yellow-900: var(--brand-yellow-900);
-  --color-brand-yellow: var(--brand-yellow-500);
   --color-brand-ink: var(--brand-light-spartan-primary-foreground);
 
   /* Neutrals */

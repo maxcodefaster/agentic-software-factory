@@ -11,6 +11,8 @@ import { map, type Observable } from 'rxjs';
 import {
   boardCardSchema,
   boardResponseSchema,
+  requirementAcceptanceSchema,
+  requirementProposalSchema,
   type BoardCard,
   type CreateCardInput,
   type KanbanBoardPage,
@@ -97,11 +99,15 @@ export class KanbanClient {
   }
 
   saveProposal(context: FactoryRequestContext, card: KanbanCard, specification: RequirementSpec): Observable<RequirementProposal> {
-    return this.http.put<RequirementProposal>(this.requirement(context, card, '/proposal'), specification);
+    return this.http.put<unknown>(this.requirement(context, card, '/proposal'), specification).pipe(
+      map((response) => requirementProposalSchema.parse(response)),
+    );
   }
 
   accept(context: FactoryRequestContext, card: KanbanCard, specification: RequirementSpec): Observable<RequirementAcceptance> {
-    return this.http.post<RequirementAcceptance>(this.requirement(context, card, '/accept'), specification);
+    return this.http.post<unknown>(this.requirement(context, card, '/accept'), specification).pipe(
+      map((response) => requirementAcceptanceSchema.parse(response)),
+    );
   }
 
   private requirement(context: FactoryRequestContext, card: KanbanCard, suffix = ''): string {

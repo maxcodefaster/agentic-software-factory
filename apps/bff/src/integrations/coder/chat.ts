@@ -369,11 +369,6 @@ export class CoderChatClient {
     };
   }
 
-  async continueImplementationChat(chatId: string, instruction: string, signal?: AbortSignal, sessionToken = this.token): Promise<void> {
-    if (!instruction.trim()) throw new Error('instruction is required');
-    await this.sendMessage(chatId, instruction, undefined, '', signal, sessionToken);
-  }
-
   async answerRequirementsChat(
     chatId: string,
     previousQuestionId: string,
@@ -794,7 +789,7 @@ function latestQuestion(
   messages: ChatMessage[],
   previousQuestionId: string,
 ): ChatQuestion | null {
-  for (const message of messages) {
+  for (const message of messages.toSorted((left, right) => right.id - left.id)) {
     for (const part of message.content) {
       if (part.tool_name !== "ask_user_question") {
         continue;

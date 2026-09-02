@@ -33,6 +33,9 @@ export const user = pgTable('user', {
   image: text('image'),
   preferredUsername: text('preferred_username').notNull().default(''),
   groups: text('groups').array().notNull().default([]),
+  deprovisionedAt: timestamp('deprovisioned_at', { withTimezone: true }),
+  deprovisionedCoderUserId: text('deprovisioned_coder_user_id'),
+  coderDeprovisionedAt: timestamp('coder_deprovisioned_at', { withTimezone: true }),
   ...timestamps,
 });
 
@@ -462,6 +465,7 @@ export const deliveryContributor = pgTable(
   {
     deliveryId: text('delivery_id').notNull().references(() => delivery.id, { onDelete: 'cascade' }),
     factoryUserId: text('factory_user_id').notNull().references(() => user.id, { onDelete: 'restrict' }),
+    forgejoAccessRevokedAt: timestamp('forgejo_access_revoked_at', { withTimezone: true }),
     ...timestamps,
   },
   (table) => [

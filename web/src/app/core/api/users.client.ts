@@ -6,16 +6,23 @@
 
 import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
-import type { Observable } from 'rxjs';
+import { map, type Observable } from 'rxjs';
 
-import type { FactoryUser } from '@agentic-software-factory/api-contracts/users';
+import {
+  assignmentUsersResponseSchema,
+  type AssignmentUser,
+  type AssignmentUsersResponse,
+} from '@agentic-software-factory/api-contracts/users';
 import type { FactoryRequestContext } from '../context/factory-context.store';
 
-export type AssignmentUser = Omit<FactoryUser, 'email'>;
-interface AssignmentUsersResponse { users: AssignmentUser[] }
+export type { AssignmentUser };
 
 @Injectable({ providedIn: 'root' })
 export class UsersClient {
   private readonly http = inject(HttpClient);
-  list(context: FactoryRequestContext): Observable<AssignmentUsersResponse> { return this.http.get<AssignmentUsersResponse>(`/api/v1/users?team=${encodeURIComponent(context.team)}`); }
+  list(context: FactoryRequestContext): Observable<AssignmentUsersResponse> {
+    return this.http.get<unknown>(`/api/v1/users?team=${encodeURIComponent(context.team)}`).pipe(
+      map((response) => assignmentUsersResponseSchema.parse(response)),
+    );
+  }
 }

@@ -101,6 +101,7 @@ export async function startInterview(
       retake,
       { ...binding, chatId: chat.chatId },
       chat.question,
+      current?.state.version ?? 0,
       scope,
     ),
   };
@@ -155,7 +156,7 @@ export async function sharpenInterview(
     return errorResponse(503, 'AI refinement is unavailable');
   }
   if (!next) return errorResponse(503, 'AI refinement did not produce a question');
-  return { state: await services.forgejo.recordInterviewRefinement(number, actor(identity), note, next, scope) };
+  return { state: await services.forgejo.recordInterviewRefinement(number, actor(identity), note, next, current.state.version, scope) };
 }
 
 function interviewBinding(state: import('./types').InterviewState, number: number): InterviewBinding {

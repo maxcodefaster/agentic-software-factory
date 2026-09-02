@@ -21,37 +21,54 @@ spec:
   policyTypes: [Ingress, Egress]
   ingress:
     - from:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: ingress-nginx
-      ports:
-        - protocol: TCP
-          port: 8080
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: ingress-nginx}}
+          podSelector: {matchLabels: {app.kubernetes.io/name: ingress-nginx}}
+      ports: [{protocol: TCP, port: 8080}]
     - from:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: monitoring
-      ports:
-        - protocol: TCP
-          port: 8080
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: monitoring}}
+          podSelector: {matchLabels: {app.kubernetes.io/name: prometheus}}
+      ports: [{protocol: TCP, port: 8080}]
   egress:
     - to:
-        - namespaceSelector:
-            matchLabels:
-              agentic-software-factory.io/dependency: "true"
-      ports:
-        - {protocol: TCP, port: 443}
-        - {protocol: TCP, port: 5432}
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}
+          podSelector: {matchLabels: {k8s-app: kube-dns}}
+      ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}]
     - to:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: kube-system
-      ports:
-        - {protocol: UDP, port: 53}
-        - {protocol: TCP, port: 53}
+        - namespaceSelector: {matchLabels: {agentic-software-factory.io/dependency: replace-me-postgresql}}
+          podSelector: {matchLabels: {app.kubernetes.io/name: replace-me-postgresql}}
+      ports: [{protocol: TCP, port: 5432}]
     - to:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: monitoring
-      ports:
-        - {protocol: TCP, port: 4318}
+        - namespaceSelector: {matchLabels: {agentic-software-factory.io/dependency: replace-me-forgejo}}
+          podSelector: {matchLabels: {app.kubernetes.io/name: replace-me-forgejo}}
+      ports: [{protocol: TCP, port: 443}]
+    - to:
+        - namespaceSelector: {matchLabels: {agentic-software-factory.io/dependency: replace-me-coder}}
+          podSelector: {matchLabels: {app.kubernetes.io/name: replace-me-coder}}
+      ports: [{protocol: TCP, port: 443}]
+    - to:
+        - namespaceSelector: {matchLabels: {agentic-software-factory.io/dependency: replace-me-egress}}
+          podSelector: {matchLabels: {app.kubernetes.io/name: replace-me-egress-proxy}}
+      ports: [{protocol: TCP, port: 3128}]
+    - to:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: monitoring}}
+          podSelector: {matchLabels: {app.kubernetes.io/name: opentelemetry-collector}}
+      ports: [{protocol: TCP, port: 4318}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: agentic-software-factory-migrate
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: agentic-software-factory-migrate
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}
+          podSelector: {matchLabels: {k8s-app: kube-dns}}
+      ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}]
+    - to:
+        - namespaceSelector: {matchLabels: {agentic-software-factory.io/dependency: replace-me-postgresql}}
+          podSelector: {matchLabels: {app.kubernetes.io/name: replace-me-postgresql}}
+      ports: [{protocol: TCP, port: 5432}]

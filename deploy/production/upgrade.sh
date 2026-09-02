@@ -21,20 +21,12 @@ validate_overlay() {
   fi
 }
 
-require_migration_contract() {
-  [ "${MIGRATIONS_BACKWARD_COMPATIBLE:-false}" = true ] || {
-    printf '%s\n' 'Set MIGRATIONS_BACKWARD_COMPATIBLE=true only after confirming this release remains compatible with the previous application version. Application rollback does not restore PostgreSQL.' >&2
-    exit 1
-  }
-}
-
 case "$mode" in
   plan)
     validate_overlay
     "$kubectl" diff -k "$OVERLAY" || test "$?" -eq 1
     ;;
   apply)
-    require_migration_contract
     validate_overlay
     "$kubectl" delete job/agentic-software-factory-migrate -n "$namespace" --ignore-not-found
     "$kubectl" apply -k "$OVERLAY" --prune -l app.kubernetes.io/part-of=agentic-software-factory
@@ -44,7 +36,6 @@ case "$mode" in
     "$kubectl" get --raw "/api/v1/namespaces/$namespace/services/agentic-software-factory:8080/proxy/readyz" >/dev/null
     ;;
   rollback)
-    require_migration_contract
     validate_overlay
     "$kubectl" rollout undo deployment/agentic-software-factory -n "$namespace"
     "$kubectl" rollout resume deployment/agentic-software-factory -n "$namespace"

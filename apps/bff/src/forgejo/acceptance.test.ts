@@ -15,7 +15,6 @@ describe("acceptance", () => {
     const client = new ForgejoClient("https://forge.example", "token", "factory", "requirements", "main", {
       fetch: fake.fetch,
       now: () => times.shift() ?? new Date("2026-01-02T03:04:05.007Z"),
-      randomBytes: (length) => new Uint8Array(length).fill(0xab),
     });
     await client.ensureLabels();
     fake.issue.labels = fake.labels.filter((label) => ["status/requirements", "spec/proposed"].includes(label.name));
@@ -169,6 +168,20 @@ describe("acceptance", () => {
     expect(retried).toEqual(first);
     expect(retried.proposedAt).toBe("2026-01-02T03:01:00Z");
     expect(fake.issue.labels.map((label) => label.name).sort()).toEqual(["spec/proposed", "status/requirements"]);
+  });
+
+  test('rejects visible Forgejo edits after acceptance while allowing metadata updates', async () => {
+    const fake = acceptedFake();
+    const client = new ForgejoClient('https://forge.example', 'token', 'factory', 'requirements', 'main', {
+      fetch: fake.fetch,
+      now: () => new Date('2026-01-02T03:04:05.006Z'),
+    });
+    await client.accept(7, 'issuer#alice', specification);
+
+    await expect(client.updateRequirement(7, 'Changed', 'Changed', [], null)).rejects.toThrow('accepted requirements cannot be edited');
+    await expect(client.updateRequirement(7, fake.issue.title, '', [], 'reviewer')).resolves.toMatchObject({ assignee: 'reviewer' });
+    expect(fake.issue.title).toBe('Faster onboarding');
+    expect(fake.issue.body).toContain('New engineers need a clear start.');
   });
 });
 

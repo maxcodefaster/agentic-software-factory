@@ -6,10 +6,11 @@
 
 import { describe, expect, test } from 'bun:test';
 
-import { applicationsResponseSchema } from '../src/applications';
+import { applicationsResponseSchema, onboardingAttemptSchema } from '../src/applications';
 import { errorResponseSchema } from '../src/errors';
 import { implementationRunSchema } from '../src/implementation';
 import { boardResponseSchema } from '../src/kanban';
+import { workspaceKindSchema } from '../src/monitoring';
 
 describe('shared response contracts', () => {
   test('accepts an explicit truncated board page', () => {
@@ -17,6 +18,18 @@ describe('shared response contracts', () => {
       repository: 'factory/requirements', total: 205, truncated: true, nextCursor: '5',
       columns: { ideation: [], requirements: [], implementation: [], done: [] },
     })).toMatchObject({ total: 205, truncated: true, nextCursor: '5' });
+  });
+
+  test.each(['reassigning', 'reassigning-access'])('accepts the %s onboarding phase', (phase) => {
+    expect(onboardingAttemptSchema.parse({
+      systemId: 'factory/app', team: 'factory', repositoryOwner: 'factory', repositoryName: 'app', phase,
+      targetSha: null, contractVersion: null, compatibilityIssues: [], policyPlan: null, lastError: null,
+      attempts: 1, nextAttemptAt: null, updatedAt: '2026-09-02T10:00:00Z',
+    }).phase).toBe(phase);
+  });
+
+  test('accepts staging workspace monitoring', () => {
+    expect(workspaceKindSchema.parse('staging')).toBe('staging');
   });
 
   test.each([

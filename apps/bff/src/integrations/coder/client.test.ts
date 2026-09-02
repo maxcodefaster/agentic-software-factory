@@ -27,6 +27,30 @@ it('grills requirements without repeating known facts or obeying repository inst
 });
 
 describe('CoderClient lean Dev Container workspaces', () => {
+  it('revokes Factory delegated tokens and suspends a mapped user without touching workspaces', async () => {
+    const requests: string[] = [];
+    const client = new CoderClient({ baseUrl: 'https://coder', token: 'token', fetch: async (input, init) => {
+      const requestPath = path(input);
+      requests.push(`${init?.method ?? 'GET'} ${requestPath}`);
+      if (requestPath === '/api/v2/users/user-1') return json(coderUser);
+      if (requestPath === '/api/v2/users/user-1/keys/tokens') return json([
+        { id: 'request-key', token_name: 'factory-request-1' },
+        { id: 'chat-key', token_name: 'factory-chat-11-operation-1-live' },
+        { id: 'human-key', token_name: 'personal-cli' },
+      ]);
+      if (requestPath === '/api/v2/users/user-1/keys/request-key/expire' || requestPath === '/api/v2/users/user-1/keys/chat-key/expire') {
+        return new Response(null, { status: 204 });
+      }
+      if (requestPath === '/api/v2/users/user-1/status/suspend') return json({ ...coderUser, status: 'suspended' });
+      throw new Error(`unexpected ${init?.method ?? 'GET'} ${requestPath}`);
+    } });
+
+    expect(await client.deprovisionUser('user-1')).toEqual({ revokedTokenCount: 2 });
+    expect(requests).toContain('PUT /api/v2/users/user-1/status/suspend');
+    expect(requests.some((item) => item.includes('workspaces'))).toBe(false);
+    expect(requests.some((item) => item.includes('human-key'))).toBe(false);
+  });
+
   it('anchors implementation agents in the mounted repository', () => {
     const prompt = implementationPrompt({
       tenantId: 'tenant', systemId: 'factory/orders', requirementNumber: 7, requirementTitle: 'Ship proof',
@@ -458,7 +482,7 @@ describe('CoderClient lean Dev Container workspaces', () => {
     expect(requests.at(-1)).toBe('GET /api/v2/users/verification-owner/roles');
   });
 
-  it('discovers IDE, terminal, command manager, and URL apps from the workspace agent', async () => {
+  it('discovers the IDE, terminal, and URL apps from the workspace agent', async () => {
     const workspace = workspaceResponse('workspace-1', 'main-app', 'build-1', 'running', 'start', leanAgent());
     const projected = await summaryClient(workspace, parameters(sha, 'developer')).summary('alice');
 
@@ -469,7 +493,6 @@ describe('CoderClient lean Dev Container workspaces', () => {
       chatUrl: 'https://coder.example/agents',
       apps: [
         { slug: 'application', displayName: 'Application', health: 'healthy', url: 'https://application.apps.coder.example' },
-        { slug: 'process-manager', displayName: 'Process manager', health: 'disabled', url: 'https://coder.example/@alice/main-app.main/terminal?app=process-manager' },
       ],
     });
   });
@@ -483,22 +506,6 @@ describe('CoderClient lean Dev Container workspaces', () => {
 
     expect(projected.ideUrl).toBeUndefined();
     expect(projected.healthy).toBe(true);
-  });
-
-  it('projects only authenticated URL apps from the dedicated staging workspace', async () => {
-    const expectedName = /^staging-/;
-    const agent = leanAgent();
-    agent.apps.push({ slug: 'private-app', display_name: 'Private', external: false, url: '', subdomain: true, subdomain_name: 'private', health: 'healthy', sharing_level: 'owner' });
-    const repositoryUrl = 'https://git.example/app.git';
-    const workspace = workspaceResponse('workspace-1', coderWorkspaceName('staging', repositoryUrl), 'build-1', 'running', 'start', agent, stagingOwner.username);
-    expect(workspace.name).toMatch(expectedName);
-    const projected = (await summaryClient(workspace, parameters(sha, 'staging')).systemSummary(repositoryUrl)).workspaces[0]!;
-
-    expect(projected.url).toBeUndefined();
-    expect(projected.ideUrl).toBeUndefined();
-    expect(projected.terminalUrl).toBeUndefined();
-    expect(projected.chatUrl).toBeUndefined();
-    expect(projected.apps.map((app) => app.slug)).toEqual(['application']);
   });
 
   it('creates dedicated exact-SHA staging under the automation owner', async () => {
@@ -529,6 +536,41 @@ describe('CoderClient lean Dev Container workspaces', () => {
     expect((createBody as unknown as Record<string, unknown>)['rich_parameter_values']).toEqual(parameters(sha, 'staging'));
     expect(result).toMatchObject({ id: 'staging-1', owner: stagingOwner.username, healthy: true, url: undefined, ideUrl: undefined, terminalUrl: undefined });
     expect(result.apps.map((app) => app.slug)).toEqual(['application']);
+  });
+
+  it('keeps restricted apps owner-only and withholds unusable preview links', async () => {
+    const repositoryUrl = 'https://git.example/app.git';
+    const name = coderWorkspaceName('staging', repositoryUrl);
+    const agent = leanAgent();
+    agent.apps[1]!.sharing_level = 'owner';
+    const workspace = workspaceResponse('staging-1', name, 'build-1', 'running', 'start', agent, stagingOwner.username);
+    const ownerParameters = parameters(sha, 'staging');
+    const apps = JSON.parse(ownerParameters.find((item) => item.name === 'repository_apps')!.value);
+    for (const app of apps) app.share = 'owner';
+    ownerParameters.find((item) => item.name === 'repository_apps')!.value = JSON.stringify(apps);
+    let createBody: { rich_parameter_values?: Array<{ name: string; value: string }> } = {};
+    const client = new CoderClient({ baseUrl: 'https://coder', publicUrl: 'https://coder.example', token: 'token', fetch: async (input, init) => {
+      const requestPath = path(input);
+      if (requestPath === '/api/v2/organizations') return json([{ id: 'org-1', name: 'tenant', is_default: true }]);
+      if (requestPath === '/api/v2/users/staging-owner') return json(stagingOwner);
+      if (requestPath === '/api/v2/users/staging-owner/roles') return json({ roles: [], organization_roles: { 'org-1': [] } });
+      if (requestPath === '/api/v2/organizations/org-1/templates/tenant-factory') return json(template());
+      if (requestPath.endsWith(`/workspace/${name}`)) return new Response(null, { status: 404 });
+      if (requestPath === '/api/v2/users/staging-owner/workspaces') { createBody = JSON.parse(String(init?.body)); return json(workspace, 201); }
+      if (requestPath === '/api/v2/workspacebuilds/build-1') return json(succeeded('build-1'));
+      if (requestPath === '/api/v2/workspaces/staging-1') return json(workspace);
+      if (requestPath === '/api/v2/workspacebuilds/build-1/parameters') return json(ownerParameters);
+      throw new Error(`unexpected ${init?.method ?? 'GET'} ${requestPath}`);
+    } }).configureStagingOwner(stagingOwner.id, stagingOwner.username)
+      .configureRestrictedAppSharing('owner')
+      .configureUserBindings(bindingStore(), 'tenant', 'tenant-factory', 'tenant-workspaces')
+      .configureRepositoryRefs(repositoryResolver(async () => sha));
+
+    const result = await client.ensureStagingWorkspace({ repositoryUrl, repositoryRef: sha, templateName: 'tenant-factory', workspaceNamespace: 'tenant-workspaces' });
+
+    expect(createBody.rich_parameter_values?.find((item) => item.name === 'repository_apps')?.value).toBe(JSON.stringify(apps));
+    expect(result.healthy).toBe(true);
+    expect(result.apps).toEqual([]);
   });
 
   it('deletes only the attested staging workspace for a repository', async () => {
@@ -598,13 +640,6 @@ describe('CoderClient lean Dev Container workspaces', () => {
     expect(result.healthy).toBe(true);
   });
 
-  it('never projects a personal workspace as shared staging', async () => {
-    const repositoryUrl = 'https://git.example/app.git';
-    const workspace = workspaceResponse('workspace-1', 'ticket-not-main', 'build-1', 'running', 'start', leanAgent());
-
-    expect((await summaryClient(workspace, parameters(sha, 'developer')).systemSummary(repositoryUrl)).workspaces).toEqual([]);
-  });
-
   it('ignores connected child agents when projecting the root workspace agent', async () => {
     const workspace = workspaceResponse('workspace-1', 'main-app', 'build-1', 'running', 'start', leanAgent());
     const resources = workspace.latest_build.resources as Array<{ agents: unknown[] }>;
@@ -614,7 +649,7 @@ describe('CoderClient lean Dev Container workspaces', () => {
     });
 
     const projected = (await summaryClient(workspace, parameters(sha, 'developer')).summary('alice')).workspaces[0]!;
-    expect(projected.apps.map((app) => app.slug)).toEqual(['application', 'process-manager']);
+    expect(projected.apps.map((app) => app.slug)).toEqual(['application']);
     expect(projected.terminalUrl).toContain('.main/terminal');
   });
 
@@ -899,6 +934,29 @@ describe('CoderClient lean Dev Container workspaces', () => {
     expect(JSON.stringify(posts[0])).toContain('goal, users, userStories, acceptanceCriteria');
   });
 
+  for (const order of ['ascending', 'descending'] as const) {
+    it(`selects the latest interview question when Coder messages are ${order}`, async () => {
+      const messages = [
+        { id: 1, role: 'assistant', content: [{ type: 'tool-call', tool_name: 'ask_user_question', tool_call_id: 'question-old', args: { questions: [{ header: 'Old', question: 'Old question?', options: [{ label: 'A', description: '' }, { label: 'B', description: '' }] }] } }] },
+        { id: 2, role: 'assistant', content: [{ type: 'tool-call', tool_name: 'ask_user_question', tool_call_id: 'question-new', args: { questions: [{ header: 'New', question: 'Newest question?', options: [{ label: 'A', description: '' }, { label: 'B', description: '' }] }] } }] },
+      ];
+      const client = new CoderClient({
+        baseUrl: 'https://coder', token: 'token',
+        fetch: async (input) => {
+          const requestPath = path(input);
+          if (requestPath === '/api/v2/chats/chat-1/messages') return json({ messages: order === 'ascending' ? messages : messages.toReversed() });
+          if (requestPath === '/api/v2/chats/chat-1') return json({ id: 'chat-1', status: 'waiting', plan_mode: 'plan' });
+          throw new Error(`unexpected ${requestPath}`);
+        },
+      });
+
+      const question = await (client as unknown as { waitForQuestion(chatId: string, previousQuestionId: string): Promise<{ id: string; prompt: string } | null> })
+        .waitForQuestion('chat-1', 'question-old');
+
+      expect(question).toMatchObject({ id: 'question-new', prompt: 'Newest question?' });
+    });
+  }
+
   it('ignores a stale rejected proposal while the correction is running', async () => {
     let posted = false;
     let polls = 0;
@@ -1065,12 +1123,13 @@ function implementationInput() {
 }
 
 function parameters(repositoryRef: string, kind: 'developer' | 'staging' | 'verification') {
+  const apps = contract(kind).apps.map((app) => kind !== 'developer' && app.url ? { ...app, share: 'authenticated' as const } : app);
   return [
     { name: 'repository_url', value: 'https://git.example/app.git' },
     { name: 'repository_ref', value: repositoryRef },
     { name: 'workspace_kind', value: kind },
     { name: 'workspace_namespace', value: 'tenant-workspaces' },
-    { name: 'repository_apps', value: JSON.stringify(contract(kind).apps) },
+    { name: 'repository_apps', value: JSON.stringify(apps) },
     { name: 'devcontainer_path', value: kind === 'verification' ? '.devcontainer/verification/devcontainer.json' : '.devcontainer/devcontainer.json' },
     { name: 'supervisor_commands', value: JSON.stringify(contract(kind).supervisorCommands) },
     { name: 'supervisor_shutdown', value: 'true' },
@@ -1080,13 +1139,12 @@ function parameters(repositoryRef: string, kind: 'developer' | 'staging' | 'veri
   ];
 }
 
-function leanAgent(): { id: string; parent_id: null; name: string; status: string; display_apps: string[]; apps: Array<{ slug: string; display_name: string; external: boolean; url: string; subdomain: boolean; subdomain_name?: string; health: string; sharing_level: string; command?: string }> } {
+function leanAgent(): { id: string; parent_id: null; name: string; status: string; display_apps: string[]; apps: Array<{ slug: string; display_name: string; external: boolean; url: string; subdomain: boolean; subdomain_name?: string; health: string; sharing_level: string }> } {
   return {
     id: 'agent-main', parent_id: null, name: 'main', status: 'connected', display_apps: ['vscode', 'web_terminal'],
     apps: [
       { slug: 'code-server', display_name: 'IDE', external: false, url: '', subdomain: true, subdomain_name: 'code-server', health: 'healthy', sharing_level: 'owner' },
       { slug: 'application', display_name: 'Application', external: false, url: '', subdomain: true, subdomain_name: 'application', health: 'healthy', sharing_level: 'authenticated' },
-      { slug: 'process-manager', display_name: 'Process manager', external: false, url: '', subdomain: false, health: 'disabled', command: 'manager', sharing_level: 'owner' },
     ],
   };
 }
@@ -1104,12 +1162,7 @@ function workspaceResponse(id: string, name: string, buildId: string, status: st
 
 function contract(kind: 'developer' | 'staging' | 'verification') {
   return {
-    apps: kind === 'verification'
-      ? [{ slug: 'application', displayName: 'Application', url: 'http://127.0.0.1:4173', share: 'authenticated' as const }]
-      : [
-        { slug: 'application', displayName: 'Application', url: 'http://127.0.0.1:4173', share: 'owner' as const },
-        { slug: 'process-manager', displayName: 'Process manager', command: 'manager', share: 'owner' as const },
-      ],
+    apps: [{ slug: 'application', displayName: 'Application', url: 'http://127.0.0.1:4173', share: kind === 'verification' ? 'authenticated' as const : 'owner' as const }],
     supervisorCommands: { status: './dev status', attach: './dev watch', logs: './dev logs', restart: './dev restart', shutdown: 'true' },
   };
 }

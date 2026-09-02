@@ -4,7 +4,7 @@
  * All software distributed under the RPL is provided strictly on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED, AND LICENSOR HEREBY DISCLAIMS ALL SUCH WARRANTIES, INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT, OR NON-INFRINGEMENT. See the RPL for specific language governing rights and limitations under the RPL.
  */
 
-import { chromium, type BrowserContext, type Page } from '../example/node_modules/playwright';
+import { chromium, type BrowserContext, type Page } from 'playwright';
 import type { ApplicationsResponse, DeveloperWorkspace } from '@agentic-software-factory/api-contracts/applications';
 
 const developerPassword = process.env.DEVELOPER_PASSWORD;

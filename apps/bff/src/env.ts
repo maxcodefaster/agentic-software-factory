@@ -13,7 +13,9 @@ const emptyUrl = z.string().trim().transform((value) => value.replace(/\/+$/, ''
 const requiredUrl = emptyUrl.pipe(z.url());
 
 const environmentSchema = z.object({
+  FACTORY_ENVIRONMENT: z.enum(['local', 'production']).default('local'),
   DATABASE_URL: z.string().trim().min(1),
+  DATABASE_TLS_CA: z.string().trim().default(''),
   HOST: z.string().trim().min(1).default('0.0.0.0'),
   PORT: z.coerce.number().int().min(1).max(65535).default(8080),
   FORGEJO_URL: requiredUrl,
@@ -41,9 +43,12 @@ const environmentSchema = z.object({
   FACTORY_CODER_VERIFICATION_OWNER: z.string().trim().regex(/^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/).default('factory-verification'),
   FACTORY_CODER_STAGING_OWNER_ID: z.uuid(),
   FACTORY_CODER_STAGING_OWNER: z.string().trim().regex(/^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/).default('factory-stage'),
+  FACTORY_CODER_RESTRICTED_APP_SHARING: z.enum(['owner', 'authenticated']).default('authenticated'),
+  FACTORY_CODER_AUTHENTICATED_APP_SCOPE_ACKNOWLEDGEMENT: z.string().trim().default(''),
   CODER_MCP_URL: requiredUrl,
   ALLOWED_ORIGINS: z.string().default(''),
   TRUSTED_PROXY_CIDRS: z.string().default(''),
+  HTTPS_PROXY: requiredUrl.optional(),
   WEB_ROOT: z.string().trim().default(''),
   OTEL_EXPORTER_OTLP_ENDPOINT: emptyUrl.pipe(z.url()).optional(),
   OTEL_SERVICE_NAME: z.string().trim().min(1).max(128).default('agentic-software-factory-bff'),
@@ -51,10 +56,11 @@ const environmentSchema = z.object({
 
 export interface RuntimeConfig {
   databaseUrl: string;
+  databaseTlsCa?: string;
   host: string;
   port: number;
   forgejo: { baseUrl: string; publicUrl: string; token: string; implementationToken: string; reviewToken: string; implementationUser: string; reviewUser: string; cloneUser: string; humanTeam: string; owner: string; authorizedOwners: string[]; branch: string };
-  coder: { baseUrl: string; publicUrl: string; wildcardAccessUrl: string; token: string; mcpUrl: string; verificationOwnerId: string; verificationOwner: string; stagingOwnerId: string; stagingOwner: string };
+  coder: { baseUrl: string; publicUrl: string; wildcardAccessUrl: string; token: string; mcpUrl: string; verificationOwnerId: string; verificationOwner: string; stagingOwnerId: string; stagingOwner: string; restrictedAppSharing: 'owner' | 'authenticated' };
   allowedOrigins: string[];
   trustedProxyCidrs: string[];
   webRoot?: string;
@@ -70,12 +76,33 @@ export function loadRuntimeConfig(env: Record<string, string | undefined> = proc
   if (!auth.coder) throw new Error('CODER_OIDC_* is required for Coder MCP identity');
   const trustedProxyCidrs = list(value.TRUSTED_PROXY_CIDRS);
   validateTrustedProxyCidrs(trustedProxyCidrs);
+  if (value.FACTORY_ENVIRONMENT === 'production') {
+    const databaseUrl = new URL(value.DATABASE_URL);
+    if (databaseUrl.searchParams.get('sslmode') !== 'verify-full' || !value.DATABASE_TLS_CA) {
+      throw new Error('production DATABASE_URL must set sslmode=verify-full and DATABASE_TLS_CA must contain the PostgreSQL CA PEM');
+    }
+    if (trustedProxyCidrs.length === 0) throw new Error('TRUSTED_PROXY_CIDRS is required in production');
+    if (!value.HTTPS_PROXY) throw new Error('HTTPS_PROXY is required in production for controlled Entra egress');
+    for (const [name, client, publicUrl] of [
+      ['CODER', auth.coder, value.CODER_PUBLIC_URL],
+      ['FORGEJO', auth.forgejo, value.FORGEJO_PUBLIC_URL],
+    ] as const) {
+      if (!client?.postLogoutRedirectUris?.includes(publicUrl)) {
+        throw new Error(`${name}_OIDC_POST_LOGOUT_REDIRECT_URIS must include the production public URL ${publicUrl}`);
+      }
+    }
+    if (value.FACTORY_CODER_RESTRICTED_APP_SHARING === 'authenticated'
+      && value.FACTORY_CODER_AUTHENTICATED_APP_SCOPE_ACKNOWLEDGEMENT !== 'deployment-wide') {
+      throw new Error('production authenticated Coder apps require FACTORY_CODER_AUTHENTICATED_APP_SCOPE_ACKNOWLEDGEMENT=deployment-wide; Factory teams do not restrict direct Coder app URLs');
+    }
+  }
   const configuredTeams = teamBoards(value.FACTORY_TEAM_BOARDS);
   if (configuredTeams.some((team) => team.slug === value.FACTORY_TENANT_ID)) {
     throw new Error('FACTORY_TEAM_BOARDS must not repeat FACTORY_TENANT_ID');
   }
   return {
     databaseUrl: value.DATABASE_URL,
+    ...(value.DATABASE_TLS_CA ? { databaseTlsCa: value.DATABASE_TLS_CA } : {}),
     host: value.HOST,
     port: value.PORT,
     forgejo: {
@@ -101,6 +128,7 @@ export function loadRuntimeConfig(env: Record<string, string | undefined> = proc
       verificationOwner: value.FACTORY_CODER_VERIFICATION_OWNER,
       stagingOwnerId: value.FACTORY_CODER_STAGING_OWNER_ID,
       stagingOwner: value.FACTORY_CODER_STAGING_OWNER,
+      restrictedAppSharing: value.FACTORY_CODER_RESTRICTED_APP_SHARING,
       mcpUrl: value.CODER_MCP_URL,
     },
     allowedOrigins: [...new Set([new URL(auth.issuer).origin, ...origins(value.ALLOWED_ORIGINS)])],

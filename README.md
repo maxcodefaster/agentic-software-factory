@@ -73,6 +73,8 @@ reasons live in the [ADRs](docs/adr/).
 A System is a Git repository with `.factory/system.yaml` at the selected commit.
 The file names its development and verification Dev Containers, runtime supervisor,
 startup timeout, browser applications, and health checks.
+Contract v1 also accepts the old optional `ide` and `release` fields for compatibility.
+Factory ignores both fields and does not read a release manifest.
 
 ```yaml
 version: 1

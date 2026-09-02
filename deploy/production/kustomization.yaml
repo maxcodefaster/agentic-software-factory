@@ -26,7 +26,13 @@ configMapGenerator:
       - AUTH_TRUSTED_ORIGINS=https://factory.example.invalid,https://coder.example.invalid,https://forgejo.example.invalid
       - ALLOWED_ORIGINS=https://factory.example.invalid
       - AUTH_MODE=entra
+      - FACTORY_ENVIRONMENT=production
+      - FACTORY_CODER_RESTRICTED_APP_SHARING=authenticated
+      - FACTORY_CODER_AUTHENTICATED_APP_SCOPE_ACKNOWLEDGEMENT=replace-me
       - ENTRA_TENANT_ID=00000000-0000-0000-0000-000000000000
+      - HTTPS_PROXY=http://egress-proxy.replace-me-egress.svc.cluster.local:3128
+      - NO_PROXY=.svc,.svc.cluster.local
+      - TRUSTED_PROXY_CIDRS=replace-me
       - FORGEJO_URL=https://forgejo.example.invalid
       - FORGEJO_PUBLIC_URL=https://forgejo.example.invalid
       - FORGEJO_OWNER=replace-me
@@ -38,6 +44,8 @@ configMapGenerator:
       - CODER_PUBLIC_URL=https://coder.example.invalid
       - CODER_WILDCARD_ACCESS_URL=*.apps.coder.example.invalid
       - CODER_MCP_URL=https://factory.example.invalid/mcp
+      - CODER_OIDC_POST_LOGOUT_REDIRECT_URIS=https://coder.example.invalid
+      - FORGEJO_OIDC_POST_LOGOUT_REDIRECT_URIS=https://forgejo.example.invalid
       - FORGEJO_OIDC_COMPATIBILITY_MAJOR=15
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector.monitoring.svc.cluster.local:4318
       - OTEL_SERVICE_NAME=agentic-software-factory-bff

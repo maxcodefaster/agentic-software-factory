@@ -13,7 +13,7 @@ Factory. Browser path applications also weaken isolation and routing.
 A System is a Forgejo repository. At one exact commit,
 `.factory/system.yaml` declares version 1, development and verification Dev Containers,
 the supervisor command contract, startup timeout, applications and health
-checks, and optional release metadata. Factory validates every referenced file
+checks. Factory validates every referenced file
 and rejects unsupported runtime privileges or container fields. The `example/`
 System is the maintained reference.
 

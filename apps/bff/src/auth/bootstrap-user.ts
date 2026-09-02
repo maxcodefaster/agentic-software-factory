@@ -33,12 +33,13 @@ export async function bootstrapLocalUser(db: Database, config: BootstrapUserConf
     }).onConflictDoNothing({ target: user.email });
 
     const existing = await tx.query.user.findFirst({
-      columns: { id: true },
+      columns: { id: true, deprovisionedAt: true },
       where: eq(user.email, config.email),
     });
     if (existing?.id !== userId) {
       throw new Error('LOCAL_AUTH_EMAIL belongs to an existing non-bootstrap user');
     }
+    if (existing.deprovisionedAt) return;
 
     await tx.update(user).set({
       emailVerified: true,

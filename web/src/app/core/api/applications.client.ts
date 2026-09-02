@@ -12,12 +12,18 @@ import {
   applicationsResponseSchema,
   developerWorkspaceSchema,
   developmentToolsSchema,
+  onboardedApplicationSchema,
+  onboardingAttemptsResponseSchema,
+  onboardingRepositoriesResponseSchema,
+  remediationResponseSchema,
   type ApplicationsResponse,
   type OnboardedApplication,
   type OnboardingRepositoriesResponse,
   type OnboardingAttemptsResponse,
   type DeveloperWorkspace,
   type DevelopmentTools,
+  type RegisterApplicationRequest,
+  type RemediationResponse,
 } from '@agentic-software-factory/api-contracts/applications';
 import type { FactoryRequestContext } from '../context/factory-context.store';
 
@@ -32,15 +38,21 @@ export class ApplicationsClient {
   }
 
   listOnboardingRepositories(): Observable<OnboardingRepositoriesResponse> {
-    return this.http.get<OnboardingRepositoriesResponse>('/api/v1/applications/onboarding/repositories');
+    return this.http.get<unknown>('/api/v1/applications/onboarding/repositories').pipe(
+      map((response) => onboardingRepositoriesResponseSchema.parse(response)),
+    );
   }
 
   listOnboardingAttempts(): Observable<OnboardingAttemptsResponse> {
-    return this.http.get<OnboardingAttemptsResponse>('/api/v1/applications/onboarding/attempts');
+    return this.http.get<unknown>('/api/v1/applications/onboarding/attempts').pipe(
+      map((response) => onboardingAttemptsResponseSchema.parse(response)),
+    );
   }
 
-  register(input: { repository: string; team: string }): Observable<OnboardedApplication> {
-    return this.http.post<OnboardedApplication>('/api/v1/applications/onboarding/register', input);
+  register(input: RegisterApplicationRequest): Observable<OnboardedApplication> {
+    return this.http.post<unknown>('/api/v1/applications/onboarding/register', input).pipe(
+      map((response) => onboardedApplicationSchema.parse(response)),
+    );
   }
 
   developmentTools(): Observable<DevelopmentTools> {
@@ -49,8 +61,10 @@ export class ApplicationsClient {
     );
   }
 
-  createRemediation(systemId: string): Observable<{ pullNumber: number; pullUrl: string; branch: string }> {
-    return this.http.post<{ pullNumber: number; pullUrl: string; branch: string }>(`/api/v1/applications/${encodeURIComponent(systemId)}/remediation`, {});
+  createRemediation(systemId: string): Observable<RemediationResponse> {
+    return this.http.post<unknown>(`/api/v1/applications/${encodeURIComponent(systemId)}/remediation`, {}).pipe(
+      map((response) => remediationResponseSchema.parse(response)),
+    );
   }
 
   retryStaging(systemId: string, team: string): Observable<void> {

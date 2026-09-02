@@ -9,7 +9,6 @@ export type Command = {
   readonly component: string;
   readonly argv: readonly string[];
   readonly operation?: "reconcile-coder";
-  readonly optional?: boolean;
 };
 
 export type CommandResult = {

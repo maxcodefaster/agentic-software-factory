@@ -25,5 +25,4 @@ export {
   brandSpacing,
   brandSurface,
   brandTokens,
-  brandYellow,
 } from './tokens';

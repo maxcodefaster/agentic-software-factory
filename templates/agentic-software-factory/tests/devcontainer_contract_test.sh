@@ -13,7 +13,6 @@ grep -F 'ENVBUILDER_WORKSPACE_FOLDER' "$root/main.tf" >/dev/null
 grep -F 'ENVBUILDER_EXIT_ON_BUILD_FAILURE' "$root/main.tf" >/dev/null
 grep -F 'CODER_AGENT_BLOCK_FILE_TRANSFER' "$root/main.tf" >/dev/null
 grep -F 'resource "coder_app" "url"' "$root/main.tf" >/dev/null
-grep -F 'resource "coder_app" "command"' "$root/main.tf" >/dev/null
 grep -F 'module "code-server"' "$root/main.tf" >/dev/null
 grep -E 'automount_service_account_token[[:space:]]*=[[:space:]]*false' "$root/main.tf" >/dev/null
 grep -F 'seccomp_profile' "$root/main.tf" >/dev/null

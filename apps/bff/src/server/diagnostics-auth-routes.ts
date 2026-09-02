@@ -27,12 +27,6 @@ function authHandler(services: ServerServices, request: Request): Promise<Respon
   return services.auth.handler?.(request) ?? errorResponse(404, 'not found');
 }
 
-function loginRedirect(services: ServerServices, request: Request): Response {
-  const queryIndex = request.url.indexOf('?');
-  const rawQuery = queryIndex === -1 ? '' : request.url.slice(queryIndex);
-  return Response.redirect(`${services.authPublicOrigin}/login${rawQuery}`, 302);
-}
-
 async function authShell(services: ServerServices, request: Request): Promise<Response> {
   const url = new URL(request.url);
   url.pathname = '/';
@@ -76,7 +70,6 @@ export function diagnosticsApiRoutes(services: ServerServices) {
         capabilities: capabilitiesFor(identity!, groups),
       });
     })
-    .get('/api/v1/teams', ({ identity }) => ({ teams: visibleTeams(identity!, services).map(({ slug, displayName }) => ({ slug, displayName })) }))
     .get('/api/v1/development-tools', async ({ request, identity }) => {
       const denied = requireCapability(identity!, services, 'developerWorkspaceCreate', 'developer persona required');
       if (denied) return denied;
@@ -137,6 +130,11 @@ export function diagnosticsAuthRoutes(services: ServerServices, startedAt: numbe
       return Response.json({ status: ready ? 'ready' : 'not-ready', dependencies, ...(systems ? { systems } : {}) }, { status: ready ? 200 : 503 });
     })
     .get('/statusz', async ({ request }) => {
+      const identity = await services.auth.authenticate(request);
+      if (!identity) return errorResponse(401, 'missing or invalid session');
+      if (!identity.groups?.includes(services.tenant.group) || !isAdmin(identity, services)) {
+        return errorResponse(403, 'admin access required');
+      }
       const [interview, systems] = await Promise.allSettled([
         services.coder.interviewReadiness(request.signal),
         services.systemsStatus?.() ?? Promise.resolve(undefined),
@@ -156,15 +154,24 @@ export function diagnosticsAuthRoutes(services: ServerServices, startedAt: numbe
         } } : services.systemsStatus ? { systems: { status: 'unavailable' } } : {}),
       };
     })
+    .post('/api/v1/users/:id/deprovision', async ({ request, params }) => {
+      const identity = await services.auth.authenticate(request);
+      if (!identity) return errorResponse(401, 'missing or invalid session');
+      if (!identity.groups?.includes(services.tenant.group)) return errorResponse(403, 'tenant access denied');
+      if (!isAdmin(identity, services)) return errorResponse(403, 'admin access required');
+      const id = params.id.trim();
+      if (!/^[A-Za-z0-9:_-]{1,255}$/.test(id)) return errorResponse(400, 'invalid user id');
+      if (id === identity.subject) return errorResponse(409, 'administrators cannot deprovision their own account');
+      if (!services.deprovisionUser) return errorResponse(503, 'user deprovisioning is not configured');
+      const result = await services.deprovisionUser(id);
+      return result ? Response.json(result, { status: 202 }) : errorResponse(404, 'tenant user not found');
+    })
     .get('/auth/config', () => services.auth.uiConfig)
     .get('/auth/consent-context', async ({ request }) => {
       const context = await services.auth.consentContext?.(request);
       return context ? consentContextSchema.parse(context) : errorResponse(400, 'invalid authorization request');
     })
-    .get('/auth/login', ({ request }) => loginRedirect(services, request))
     .post('/auth/logout', ({ request }) => services.auth.handle('logout', request))
-    .get('/api/auth/login', ({ request }) => loginRedirect(services, request))
-    .post('/api/auth/logout', ({ request }) => services.auth.handle('logout', request))
     .get('/__factory/logout', ({ request }) => services.auth.logoutBridgeRequest?.(request) ?? errorResponse(404, 'not found'))
     .get('/login', ({ request }) => authShell(services, request))
     .head('/login', ({ request }) => authShell(services, request))

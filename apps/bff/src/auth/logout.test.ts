@@ -115,6 +115,19 @@ describe('coordinated logout', () => {
     }
   });
 
+  test.each([302, 303])('accepts Forgejo logout redirect status %s', async (status) => {
+    spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, {
+      status,
+      headers: { location: 'https://forgejo.example/' },
+    }));
+
+    const response = await service(config({ forgejoPublicUrl: 'https://forgejo.example' }))
+      .logoutBridgeRequest(bridgeRequest('forgejo'));
+
+    expect(response.status).toBe(303);
+    expect(response.headers.get('location')).toBe(`${issuer}/login`);
+  });
+
   test('bounds downstream logout and returns a sanitized failure', async () => {
     let downstreamSignal: AbortSignal | undefined;
     spyOn(globalThis, 'fetch').mockImplementation((async (_input, init) => {

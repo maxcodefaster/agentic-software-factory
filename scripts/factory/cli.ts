@@ -8,9 +8,9 @@ import { defaultRunner, type Command, type Runner } from "./process";
 async function runCommands(commands: readonly Command[], runner: Runner): Promise<boolean> {
   for (const command of commands) {
     const result = await runner(command);
-    console.log(`${command.component}: ${result.exitCode === 0 ? "ready" : command.optional ? "unavailable (optional)" : "failed"}`);
+    console.log(`${command.component}: ${result.exitCode === 0 ? "ready" : "failed"}`);
     if (result.stdout?.trim()) console.log(result.stdout.trim());
-    if (result.exitCode && !command.optional) {
+    if (result.exitCode) {
       if (result.stderr?.trim()) console.error(result.stderr.trim());
       return false;
     }

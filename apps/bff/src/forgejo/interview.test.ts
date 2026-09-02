@@ -30,8 +30,8 @@ describe("AI interview provenance", () => {
   test("requires a complete AI binding and validated question", async () => {
     const fake = fakeForgejo();
     const client = new ForgejoClient("https://forge.example", "token", "factory", "requirements", "main", { fetch: fake.fetch });
-    await expect(client.beginInterview(7, "alice", false, { ...binding, chatId: "" }, question)).rejects.toThrow("binding is incomplete");
-    await expect(client.beginInterview(7, "alice", false, binding, { ...question, options: [] })).rejects.toThrow("valid interview question");
+    await expect(client.beginInterview(7, "alice", false, { ...binding, chatId: "" }, question, 0)).rejects.toThrow("binding is incomplete");
+    await expect(client.beginInterview(7, "alice", false, binding, { ...question, options: [] }, 0)).rejects.toThrow("valid interview question");
   });
 
   test("rejects proposal and acceptance without matching AI provenance", async () => {
@@ -39,7 +39,7 @@ describe("AI interview provenance", () => {
     const client = new ForgejoClient("https://forge.example", "token", "factory", "requirements", "main", { fetch: fake.fetch });
     await client.ensureLabels();
     fake.issue.labels = fake.labels.filter((label) => ["status/requirements", "spec/draft"].includes(label.name));
-    await client.beginInterview(7, "alice", false, binding, question);
+    await client.beginInterview(7, "alice", false, binding, question, 0);
     await expect(client.propose(7, "alice", specification)).rejects.toThrow("finish the AI interview");
     await expect(client.propose(7, "coder", specification, {
       source: "coder-ai", ...binding, requirementNumber: 7, runId: "other-run",
@@ -59,7 +59,7 @@ describe("AI interview provenance", () => {
   test("persists an answer operation before completion and rejects a changed answer", async () => {
     const fake = fakeForgejo();
     const client = new ForgejoClient("https://forge.example", "token", "factory", "requirements", "main", { fetch: fake.fetch });
-    await client.beginInterview(7, "alice", false, binding, question);
+    await client.beginInterview(7, "alice", false, binding, question, 0);
     const answer = { questionId: question.id, expectedVersion: 1, selected: ["option-0"], customText: "" };
     const stale = await client.prepareInterviewAnswer(7, "alice", { ...answer, expectedVersion: 0 }, "Customers", "operation-0")
       .catch((error: unknown) => error);

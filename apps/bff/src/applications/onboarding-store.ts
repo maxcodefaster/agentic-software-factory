@@ -5,12 +5,13 @@
  */
 
 import { and, asc, eq, gt, inArray, isNull, lt, or, sql } from 'drizzle-orm';
+import type { OnboardingPhase } from '@agentic-software-factory/api-contracts/applications';
 
 import type { Database } from '../db';
 import { systemOnboarding, systemOnboardingEvent, systemRegistration } from '../db/schema';
 import type { CompatibilityIssue } from './system-contract';
 
-export type OnboardingPhase = 'validating' | 'applying-access' | 'applying-policy' | 'creating-staging' | 'ready' | 'retry-wait' | 'repair' | 'failed' | 'reassigning' | 'reassigning-access' | 'unregistering' | 'removed';
+export type { OnboardingPhase };
 
 export interface OnboardingRecord {
   systemId: string;

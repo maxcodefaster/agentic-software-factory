@@ -25,10 +25,11 @@ spec:
     spec:
       serviceAccountName: agentic-software-factory
       automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 60
       topologySpreadConstraints:
         - maxSkew: 1
           topologyKey: kubernetes.io/hostname
-          whenUnsatisfiable: ScheduleAnyway
+          whenUnsatisfiable: DoNotSchedule
           labelSelector:
             matchLabels:
               app.kubernetes.io/name: agentic-software-factory
@@ -42,16 +43,99 @@ spec:
       containers:
         - name: bff
           image: control-plane
-          envFrom:
-            - configMapRef:
-                name: factory-config
-            - secretRef:
-                name: factory-runtime
           env:
             - name: HOME
               value: /tmp
             - name: XDG_CACHE_HOME
               value: /tmp/.cache
+            - name: FACTORY_ENVIRONMENT
+              valueFrom: {configMapKeyRef: {name: factory-config, key: FACTORY_ENVIRONMENT}}
+            - name: FACTORY_CODER_RESTRICTED_APP_SHARING
+              valueFrom: {configMapKeyRef: {name: factory-config, key: FACTORY_CODER_RESTRICTED_APP_SHARING}}
+            - name: FACTORY_CODER_AUTHENTICATED_APP_SCOPE_ACKNOWLEDGEMENT
+              valueFrom: {configMapKeyRef: {name: factory-config, key: FACTORY_CODER_AUTHENTICATED_APP_SCOPE_ACKNOWLEDGEMENT}}
+            - name: DATABASE_URL
+              valueFrom: {secretKeyRef: {name: factory-runtime, key: DATABASE_URL}}
+            - name: DATABASE_TLS_CA
+              valueFrom: {secretKeyRef: {name: factory-runtime, key: DATABASE_TLS_CA}}
+            - name: AUTH_ISSUER
+              valueFrom: {configMapKeyRef: {name: factory-config, key: AUTH_ISSUER}}
+            - name: AUTH_TRUSTED_ORIGINS
+              valueFrom: {configMapKeyRef: {name: factory-config, key: AUTH_TRUSTED_ORIGINS}}
+            - name: ALLOWED_ORIGINS
+              valueFrom: {configMapKeyRef: {name: factory-config, key: ALLOWED_ORIGINS}}
+            - name: AUTH_MODE
+              valueFrom: {configMapKeyRef: {name: factory-config, key: AUTH_MODE}}
+            - name: BETTER_AUTH_SECRET
+              valueFrom: {secretKeyRef: {name: factory-runtime, key: BETTER_AUTH_SECRET}}
+            - name: ENTRA_TENANT_ID
+              valueFrom: {configMapKeyRef: {name: factory-config, key: ENTRA_TENANT_ID}}
+            - name: ENTRA_CLIENT_ID
+              valueFrom: {secretKeyRef: {name: factory-runtime, key: ENTRA_CLIENT_ID}}
+            - name: ENTRA_CLIENT_SECRET
+              valueFrom: {secretKeyRef: {name: factory-runtime, key: ENTRA_CLIENT_SECRET}}
+            - name: HTTPS_PROXY
+              valueFrom: {configMapKeyRef: {name: factory-config, key: HTTPS_PROXY}}
+            - name: NO_PROXY
+              valueFrom: {configMapKeyRef: {name: factory-config, key: NO_PROXY}}
+            - name: TRUSTED_PROXY_CIDRS
+              valueFrom: {configMapKeyRef: {name: factory-config, key: TRUSTED_PROXY_CIDRS}}
+            - name: FORGEJO_URL
+              valueFrom: {configMapKeyRef: {name: factory-config, key: FORGEJO_URL}}
+            - name: FORGEJO_PUBLIC_URL
+              valueFrom: {configMapKeyRef: {name: factory-config, key: FORGEJO_PUBLIC_URL}}
+            - name: FORGEJO_OWNER
+              valueFrom: {configMapKeyRef: {name: factory-config, key: FORGEJO_OWNER}}
+            - name: FORGEJO_AUTHORIZED_OWNERS
+              valueFrom: {configMapKeyRef: {name: factory-config, key: FORGEJO_AUTHORIZED_OWNERS}}
+            - name: FORGEJO_BRANCH
+              valueFrom: {configMapKeyRef: {name: factory-config, key: FORGEJO_BRANCH}}
+            - name: FORGEJO_OIDC_COMPATIBILITY_MAJOR
+              valueFrom: {configMapKeyRef: {name: factory-config, key: FORGEJO_OIDC_COMPATIBILITY_MAJOR}}
+            - name: FORGEJO_TOKEN
+              valueFrom: {secretKeyRef: {name: factory-runtime, key: FORGEJO_TOKEN}}
+            - name: FORGEJO_IMPLEMENTATION_TOKEN
+              valueFrom: {secretKeyRef: {name: factory-runtime, key: FORGEJO_IMPLEMENTATION_TOKEN}}
+            - name: FORGEJO_REVIEW_TOKEN
+              valueFrom: {secretKeyRef: {name: factory-runtime, key: FORGEJO_REVIEW_TOKEN}}
+            - name: FORGEJO_OIDC_CLIENT_ID
+              valueFrom: {secretKeyRef: {name: factory-runtime, key: FORGEJO_OIDC_CLIENT_ID}}
+            - name: FORGEJO_OIDC_CLIENT_SECRET
+              valueFrom: {secretKeyRef: {name: factory-runtime, key: FORGEJO_OIDC_CLIENT_SECRET}}
+            - name: FORGEJO_OIDC_REDIRECT_URIS
+              valueFrom: {secretKeyRef: {name: factory-runtime, key: FORGEJO_OIDC_REDIRECT_URIS}}
+            - name: FORGEJO_OIDC_POST_LOGOUT_REDIRECT_URIS
+              valueFrom: {configMapKeyRef: {name: factory-config, key: FORGEJO_OIDC_POST_LOGOUT_REDIRECT_URIS}}
+            - name: CODER_URL
+              valueFrom: {configMapKeyRef: {name: factory-config, key: CODER_URL}}
+            - name: CODER_PUBLIC_URL
+              valueFrom: {configMapKeyRef: {name: factory-config, key: CODER_PUBLIC_URL}}
+            - name: CODER_WILDCARD_ACCESS_URL
+              valueFrom: {configMapKeyRef: {name: factory-config, key: CODER_WILDCARD_ACCESS_URL}}
+            - name: CODER_MCP_URL
+              valueFrom: {configMapKeyRef: {name: factory-config, key: CODER_MCP_URL}}
+            - name: CODER_TOKEN
+              valueFrom: {secretKeyRef: {name: factory-runtime, key: CODER_TOKEN}}
+            - name: CODER_OIDC_CLIENT_ID
+              valueFrom: {secretKeyRef: {name: factory-runtime, key: CODER_OIDC_CLIENT_ID}}
+            - name: CODER_OIDC_CLIENT_SECRET
+              valueFrom: {secretKeyRef: {name: factory-runtime, key: CODER_OIDC_CLIENT_SECRET}}
+            - name: CODER_OIDC_REDIRECT_URIS
+              valueFrom: {secretKeyRef: {name: factory-runtime, key: CODER_OIDC_REDIRECT_URIS}}
+            - name: CODER_OIDC_POST_LOGOUT_REDIRECT_URIS
+              valueFrom: {configMapKeyRef: {name: factory-config, key: CODER_OIDC_POST_LOGOUT_REDIRECT_URIS}}
+            - name: FACTORY_CODER_VERIFICATION_OWNER_ID
+              valueFrom: {secretKeyRef: {name: factory-runtime, key: FACTORY_CODER_VERIFICATION_OWNER_ID}}
+            - name: FACTORY_CODER_STAGING_OWNER_ID
+              valueFrom: {secretKeyRef: {name: factory-runtime, key: FACTORY_CODER_STAGING_OWNER_ID}}
+            - name: FACTORY_TENANT_ID
+              valueFrom: {configMapKeyRef: {name: factory-config, key: FACTORY_TENANT_ID}}
+            - name: FACTORY_WORKSPACE_NAMESPACE
+              valueFrom: {configMapKeyRef: {name: factory-config, key: FACTORY_WORKSPACE_NAMESPACE}}
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              valueFrom: {configMapKeyRef: {name: factory-config, key: OTEL_EXPORTER_OTLP_ENDPOINT}}
+            - name: OTEL_SERVICE_NAME
+              valueFrom: {configMapKeyRef: {name: factory-config, key: OTEL_SERVICE_NAME}}
           ports:
             - name: http
               containerPort: 8080

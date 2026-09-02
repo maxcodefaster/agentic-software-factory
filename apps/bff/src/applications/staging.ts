@@ -10,6 +10,7 @@ import type { ApplicationRegistry } from './registry';
 import type { StagingStore } from './staging-store';
 import type { WorkspaceStartupMetrics } from './startup-metrics';
 import { UpstreamHttpError, UpstreamTimeoutError } from '../integrations/fetch';
+import { startLeaseHeartbeat } from '../lease-heartbeat';
 
 export interface StagingSnapshot {
   applicationId: string;
@@ -39,6 +40,8 @@ export interface SystemStatusSummary {
 export class StagingReconciler {
   private readonly instanceId = `staging_${crypto.randomUUID().replaceAll('-', '')}`;
   private readonly deletionWaitMs = 5_000;
+  private readonly leaseMs = 15 * 60_000;
+  private readonly heartbeatMs = 30_000;
 
   constructor(
     private readonly applications: Pick<ApplicationRegistry, 'list' | 'get' | 'persistedStatus'>,
@@ -196,26 +199,44 @@ export class StagingReconciler {
 
   async delete(systemId: string, repositoryUrl: string, signal?: AbortSignal): Promise<void> {
     const deadline = Date.now() + this.deletionWaitMs;
-    let claim = await this.store.claimDeletion(systemId, this.instanceId, new Date(), 15 * 60_000);
+    let claim = await this.store.claimDeletion(systemId, this.instanceId, new Date(), this.leaseMs);
     while (claim.status === 'busy' && Date.now() < deadline) {
       await wait(50, signal);
-      claim = await this.store.claimDeletion(systemId, this.instanceId, new Date(), 15 * 60_000);
+      claim = await this.store.claimDeletion(systemId, this.instanceId, new Date(), this.leaseMs);
     }
     if (claim.status === 'busy') throw Object.assign(new Error('Staging reconciliation is still active'), { status: 409 });
+    const heartbeat = claim.status === 'claimed' ? await startLeaseHeartbeat(
+      () => this.store.renewDeletion(systemId, this.instanceId, claim.generation, new Date(), this.leaseMs),
+      this.heartbeatMs,
+      { lost: 'Staging deletion lease was lost', failed: 'Staging deletion lease heartbeat failed' },
+    ) : null;
+    const deletionSignal = heartbeat ? (signal ? AbortSignal.any([signal, heartbeat.signal]) : heartbeat.signal) : signal;
     try {
       await this.coder.deleteStagingWorkspace({
         repositoryUrl,
         templateName: this.templateName,
         workspaceNamespace: this.workspaceNamespace,
-      }, signal);
+      }, deletionSignal);
+      heartbeat?.throwIfLost();
+      await heartbeat?.stop();
+      heartbeat?.throwIfLost();
       if (claim.status === 'claimed' && !await this.store.finishDeletion(systemId, this.instanceId, claim.generation)) {
         throw new Error('Staging deletion lease was lost');
       }
     } catch (error) {
-      if (claim.status === 'claimed') {
-        await this.store.failDeletion(systemId, this.instanceId, claim.generation, error instanceof Error ? error.message : String(error));
+      await heartbeat?.stop();
+      let failure = error;
+      try {
+        heartbeat?.throwIfLost();
+      } catch (leaseError) {
+        failure = leaseError;
       }
-      throw error;
+      if (claim.status === 'claimed') {
+        await this.store.failDeletion(systemId, this.instanceId, claim.generation, failure instanceof Error ? failure.message : String(failure));
+      }
+      throw failure;
+    } finally {
+      await heartbeat?.stop();
     }
   }
 
@@ -230,7 +251,7 @@ export class StagingReconciler {
             await this.store.observeHealthy(application.id, application.defaultSha, observed);
             return;
           }
-          const generation = await this.store.claim(application.id, this.instanceId, new Date(), 15 * 60_000);
+          const generation = await this.store.claim(application.id, this.instanceId, new Date(), this.leaseMs);
           if (generation !== null) await this.store.succeed(application.id, this.instanceId, generation, application.defaultSha, observed);
           return;
         }
@@ -239,8 +260,14 @@ export class StagingReconciler {
       }
       if (desired.phase === 'healthy') await this.store.retry(application.id);
     }
-    const generation = await this.store.claim(application.id, this.instanceId, new Date(), 15 * 60_000);
+    const generation = await this.store.claim(application.id, this.instanceId, new Date(), this.leaseMs);
     if (generation === null) return;
+    const heartbeat = await startLeaseHeartbeat(
+      () => this.store.renew(application.id, this.instanceId, generation, application.defaultSha, new Date(), this.leaseMs),
+      this.heartbeatMs,
+      { lost: 'Staging reconciliation lease was lost', failed: 'Staging reconciliation lease heartbeat failed' },
+    );
+    const reconcileSignal = signal ? AbortSignal.any([signal, heartbeat.signal]) : heartbeat.signal;
     try {
       const workspace = await this.metrics.measure({
         systemId: application.id, kind: 'staging', sha: application.defaultSha, contractVersion: 1,
@@ -250,10 +277,25 @@ export class StagingReconciler {
         repositoryRef: application.defaultSha,
         templateName: this.templateName,
         workspaceNamespace: this.workspaceNamespace,
-      }, signal));
-      await this.store.succeed(application.id, this.instanceId, generation, application.defaultSha, workspace);
+      }, reconcileSignal));
+      heartbeat.throwIfLost();
+      await heartbeat.stop();
+      heartbeat.throwIfLost();
+      if (!await this.store.succeed(application.id, this.instanceId, generation, application.defaultSha, workspace)) {
+        throw new Error('Staging reconciliation lease was lost');
+      }
     } catch (error) {
-      await this.store.fail(application.id, this.instanceId, generation, application.defaultSha, error instanceof Error ? error.message : 'Staging reconciliation failed');
+      await heartbeat.stop();
+      let failure = error;
+      try {
+        heartbeat.throwIfLost();
+      } catch (leaseError) {
+        failure = leaseError;
+      }
+      await this.store.fail(application.id, this.instanceId, generation, application.defaultSha, failure instanceof Error ? failure.message : 'Staging reconciliation failed');
+      if (heartbeat.signal.aborted || (failure instanceof Error && failure.message === 'Staging reconciliation lease was lost')) throw failure;
+    } finally {
+      await heartbeat.stop();
     }
   }
 

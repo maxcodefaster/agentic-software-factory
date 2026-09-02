@@ -17,6 +17,7 @@ spec:
       restartPolicy: OnFailure
       serviceAccountName: agentic-software-factory-migrate
       automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 60
       securityContext:
         runAsNonRoot: true
         runAsUser: 10001
@@ -28,9 +29,19 @@ spec:
         - name: migrate
           image: control-plane
           command: [bun, dist/db/run-migrations.js]
-          envFrom:
-            - secretRef:
-                name: factory-migration
+          env:
+            - name: FACTORY_ENVIRONMENT
+              value: production
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: factory-migration
+                  key: DATABASE_URL
+            - name: DATABASE_TLS_CA
+              valueFrom:
+                secretKeyRef:
+                  name: factory-migration
+                  key: DATABASE_TLS_CA
           resources:
             requests:
               cpu: 50m

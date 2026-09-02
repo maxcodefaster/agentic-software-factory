@@ -11,11 +11,24 @@ import { resolve } from 'node:path';
 import { createAuthCore } from '.';
 import { bootstrapLocalUser } from './bootstrap-user';
 import { FactoryAuthService } from './service';
+import { UserDeprovisionStore } from './deprovision';
 import type { FactoryAuthConfig } from './config';
 import { pkceChallenge, sha256Base64Url } from './security';
 import { createDatabase } from '../db';
 import { closeDatabase, migrateDatabase } from '../db/migrate';
-import { oauthAccessToken } from '../db/schema';
+import {
+  account,
+  coderUserBinding,
+  delivery,
+  deliveryContributor,
+  oauthAccessToken,
+  oauthConsent,
+  oauthRefreshToken,
+  session,
+  systemRegistration,
+  user,
+  verification,
+} from '../db/schema';
 
 const issuer = 'http://127.0.0.1:48080';
 const containerName = `factory-auth-test-${process.pid}-${crypto.randomUUID().slice(0, 8)}`;
@@ -158,7 +171,7 @@ beforeAll(async () => {
   };
   core = await createAuthCore(database.db, config);
   await createAuthCore(database.db, config);
-  service = new FactoryAuthService(core, config);
+  service = new FactoryAuthService(core, config, database.db);
 
   await bootstrapLocalUser(database.db, {
     email: 'local-user@factory.test',
@@ -402,6 +415,92 @@ describe.skipIf(process.env.AUTH_INTEGRATION_SKIP === 'true')('Better Auth Postg
     expect(refreshed.status).toBe(200);
     const refreshedAccessToken = (await refreshed.json() as { access_token: string }).access_token;
     expect(await service.authenticateMcp(request('/mcp', { headers: { authorization: `Bearer ${refreshedAccessToken}` } }))).toBe(localUser!.id);
+  }, 30_000);
+
+  test('deprovision revokes cached sessions, OAuth grants, MCP access, codes, and the Coder binding', async () => {
+    const cookie = await signIn('local-user@factory.test', bootstrapPassword);
+    const tokens = await oidcTokens(clients[0]!, 'openid profile email groups offline_access mcp:call');
+    const target = await database.db.query.user.findFirst({
+      columns: { id: true }, where: (table, { eq }) => eq(table.email, 'local-user@factory.test'),
+    });
+    expect(target).toBeTruthy();
+    await database.db.insert(coderUserBinding).values({ factoryUserId: target!.id, coderUserId: 'coder-user-1' }).onConflictDoNothing();
+    await database.db.insert(systemRegistration).values({
+      tenantId: 'factory', systemId: 'factory/deprovision-test', teamId: 'factory', forgejoOwner: 'factory', forgejoRepository: 'deprovision-test',
+    }).onConflictDoNothing();
+    await database.db.insert(delivery).values([
+      { id: 'delivery-deprovision-active', requirementNumber: 41, tenantId: 'factory', systemId: 'factory/deprovision-test', acceptedDigest: 'digest-active', createdByUserId: target!.id },
+      { id: 'delivery-deprovision-late', requirementNumber: 42, tenantId: 'factory', systemId: 'factory/deprovision-test', acceptedDigest: 'digest-late', createdByUserId: target!.id },
+    ]).onConflictDoNothing();
+    await database.db.insert(deliveryContributor).values({ deliveryId: 'delivery-deprovision-active', factoryUserId: target!.id }).onConflictDoNothing();
+
+    const pendingAuthorize = new URL('/oauth2/authorize', issuer);
+    pendingAuthorize.search = new URLSearchParams({
+      response_type: 'code', client_id: clients[0]!.clientId, redirect_uri: clients[0]!.redirectUris[0]!,
+      scope: 'openid profile', state: 'pending-state', nonce: 'pending-nonce',
+      code_challenge: await pkceChallenge(`v${'b'.repeat(63)}`), code_challenge_method: 'S256',
+    }).toString();
+    const pending = await core.handler(new Request(pendingAuthorize, { headers: { cookie } }));
+    expect(pending.status).toBe(302);
+    const code = new URL(pending.headers.get('location')!).searchParams.get('code');
+    expect(code).toBeTruthy();
+
+    expect(await service.authenticate(new Request(`${issuer}/api/v1/session`, { headers: { cookie } }))).not.toBeNull();
+    expect(await service.authenticateMcp(request('/mcp', { headers: { authorization: `Bearer ${tokens.accessToken}` } }))).toBe(target!.id);
+
+    expect(await new UserDeprovisionStore(database.db).deprovision(target!.id, 'tenant-factory')).toMatchObject({
+      id: target!.id, coderUserId: 'coder-user-1', coderDeprovisioned: false,
+    });
+    expect(await new UserDeprovisionStore(database.db).deprovision(target!.id, 'tenant-factory')).toMatchObject({
+      id: target!.id, coderUserId: 'coder-user-1', coderDeprovisioned: false,
+    });
+
+    expect(await service.authenticate(new Request(`${issuer}/api/v1/session`, { headers: { cookie } }))).toBeNull();
+    expect(await service.authenticateMcp(request('/mcp', { headers: { authorization: `Bearer ${tokens.accessToken}` } }))).toBeNull();
+    const refresh = await core.handler(request('/oauth2/token', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+        authorization: `Basic ${btoa(`${clients[0]!.clientId}:${clients[0]!.clientSecret}`)}`,
+      },
+      body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: tokens.refreshToken! }),
+    }));
+    expect(refresh.status).toBe(400);
+
+    const [persisted] = await database.db.select().from(user).where(eq(user.id, target!.id));
+    expect(persisted).toMatchObject({ id: target!.id, groups: [], deprovisionedCoderUserId: 'coder-user-1' });
+    expect(persisted!.deprovisionedAt).toBeInstanceOf(Date);
+    expect(await database.db.select().from(session).where(eq(session.userId, target!.id))).toHaveLength(0);
+    expect(await database.db.select().from(oauthAccessToken).where(eq(oauthAccessToken.userId, target!.id))).toHaveLength(0);
+    expect(await database.db.select().from(oauthRefreshToken).where(eq(oauthRefreshToken.userId, target!.id))).toHaveLength(0);
+    expect(await database.db.select().from(oauthConsent).where(eq(oauthConsent.userId, target!.id))).toHaveLength(0);
+    expect(await database.db.select().from(coderUserBinding).where(eq(coderUserBinding.factoryUserId, target!.id))).toHaveLength(0);
+    expect(await database.db.select({ password: account.password, accessToken: account.accessToken, refreshToken: account.refreshToken })
+      .from(account).where(eq(account.userId, target!.id))).toEqual([{ password: null, accessToken: null, refreshToken: null }]);
+    expect((await database.db.select().from(verification)).some((row) => row.value.includes(target!.id))).toBe(false);
+    expect(await database.db.select().from(delivery).where(eq(delivery.createdByUserId, target!.id))).toHaveLength(2);
+    expect(await database.db.select().from(deliveryContributor).where(eq(deliveryContributor.factoryUserId, target!.id))).toHaveLength(1);
+    expect(await new UserDeprovisionStore(database.db).pendingForgejoRevocations(target!.id)).toEqual([
+      expect.objectContaining({
+        deliveryId: 'delivery-deprovision-active', username: 'local-user', owner: 'factory', repository: 'deprovision-test',
+        branch: 'factory/requirement-41-ision-active',
+      }),
+    ]);
+    await expect(Promise.resolve(database.db.insert(session).values({
+      id: 'late-session', token: 'late-session-token', userId: target!.id, expiresAt: new Date(Date.now() + 60_000),
+    }))).rejects.toThrow('Failed query');
+    await expect(Promise.resolve(database.db.insert(coderUserBinding).values({
+      factoryUserId: target!.id, coderUserId: 'late-coder-user',
+    }))).rejects.toThrow('Failed query');
+    await expect(Promise.resolve(database.db.insert(deliveryContributor).values({
+      deliveryId: 'delivery-deprovision-late', factoryUserId: target!.id,
+    }))).rejects.toThrow('Failed query');
+    await expect(Promise.resolve(database.db.update(user).set({ groups: ['tenant-factory'] }).where(eq(user.id, target!.id))))
+      .rejects.toThrow('Failed query');
+    await bootstrapLocalUser(database.db, {
+      email: 'local-user@factory.test', password: bootstrapPassword, name: 'Local User', groups: ['tenant-factory'],
+    });
+    expect((await database.db.select({ groups: user.groups }).from(user).where(eq(user.id, target!.id)))[0]?.groups).toEqual([]);
   }, 30_000);
 
 });
