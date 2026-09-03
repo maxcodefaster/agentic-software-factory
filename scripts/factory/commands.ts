@@ -52,9 +52,18 @@ export const checkCommands: readonly Command[] = [
   { component: "dependencies", argv: ["bun", "install", "--frozen-lockfile"] },
   { component: "dependencies", argv: ["bun", "audit"] },
   {
+    component: "db",
+    argv: ["bun", "run", "--filter=@agentic-software-factory/db", "typecheck"],
+  },
+  {
+    component: "db",
+    argv: ["bun", "run", "--filter=@agentic-software-factory/db", "test"],
+  },
+  {
     component: "bff",
     argv: ["bun", "run", "--filter=@agentic-software-factory/bff", "typecheck"],
   },
+  { component: "api-generation", argv: ["bun", "run", "api:check"] },
   { component: "coder-pins", argv: ["bun", "scripts/check-coder-pins.ts"] },
   {
     component: "bff-auth",

@@ -16,10 +16,29 @@ export const factoryUserSchema = z.object({
 
 export const usersResponseSchema = z.object({ users: z.array(factoryUserSchema) });
 
-export const assignmentUserSchema = factoryUserSchema.omit({ email: true });
-export const assignmentUsersResponseSchema = z.object({ users: z.array(assignmentUserSchema) });
+export const assignmentUserSchema = factoryUserSchema.omit({ email: true }).strict();
+export const assignmentUsersResponseSchema = z.object({ users: z.array(assignmentUserSchema) }).strict();
+
+export const userDeprovisionResponseSchema = z.object({
+  id: z.string(),
+  status: z.literal('deprovisioned'),
+  persisted: z.literal(true),
+  coder: z.discriminatedUnion('status', [
+    z.object({
+      status: z.literal('suspended'),
+      revokedTokenCount: z.number().int().nonnegative().optional(),
+    }).strict(),
+    z.object({ status: z.literal('not-linked') }).strict(),
+    z.object({ status: z.literal('pending') }).strict(),
+  ]),
+  forgejo: z.object({
+    status: z.literal('requested'),
+    immediate: z.boolean(),
+  }).strict(),
+}).strict();
 
 export type FactoryUser = z.infer<typeof factoryUserSchema>;
 export type UsersResponse = z.infer<typeof usersResponseSchema>;
 export type AssignmentUser = z.infer<typeof assignmentUserSchema>;
 export type AssignmentUsersResponse = z.infer<typeof assignmentUsersResponseSchema>;
+export type UserDeprovisionResponse = z.infer<typeof userDeprovisionResponseSchema>;

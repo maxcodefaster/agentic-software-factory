@@ -5,9 +5,8 @@
  */
 
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { resolve } from 'node:path';
-import { createDatabase } from '../db';
-import { closeDatabase, migrateDatabase } from '../db/migrate';
+import { createDatabase } from '@agentic-software-factory/db';
+import { bundledMigrationsFolder, closeDatabase, migrateDatabase } from '@agentic-software-factory/db/migrate';
 import { DatabaseOnboardingLifecycleStore } from './onboarding-store';
 import { StagingStore } from './staging-store';
 import { ImplementationStore } from '../implementation/store';
@@ -18,7 +17,7 @@ const database = url ? createDatabase(url) : null;
 
 beforeAll(async () => {
   if (!database) return;
-  await migrateDatabase(database.db, resolve(import.meta.dir, '../../drizzle'));
+  await migrateDatabase(database.db, bundledMigrationsFolder);
   await database.db.execute('truncate table operation, delivery_completion, delivery_verification, delivery_contributor, delivery, staging_reconciliation_event, staging_reconciliation, system_onboarding_event, system_onboarding, system_registration, coder_user_binding, "user" cascade');
   await database.db.execute(`insert into "user" (id, name, email, email_verified, preferred_username) values ('reviewer', 'Reviewer', 'reviewer@example.test', true, 'reviewer')`);
 });

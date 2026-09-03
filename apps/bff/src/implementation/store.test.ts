@@ -6,11 +6,10 @@
 
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
 import { eq } from 'drizzle-orm';
-import { resolve } from 'node:path';
 
-import { createDatabase } from '../db';
-import { closeDatabase, migrateDatabase } from '../db/migrate';
-import { delivery, deliveryCompletion, deliveryContributor, deliveryVerification, operation, systemRegistration, user } from '../db/schema';
+import { createDatabase } from '@agentic-software-factory/db';
+import { bundledMigrationsFolder, closeDatabase, migrateDatabase } from '@agentic-software-factory/db/migrate';
+import { delivery, deliveryCompletion, deliveryContributor, deliveryVerification, operation, systemRegistration, user } from '@agentic-software-factory/db/schema';
 import { ImplementationStore } from './store';
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
@@ -22,7 +21,7 @@ integration('ImplementationStore', () => {
   const second = new ImplementationStore(database.db, 'tenant');
 
   beforeAll(async () => {
-    await migrateDatabase(database.db, resolve(import.meta.dir, '../../drizzle'));
+    await migrateDatabase(database.db, bundledMigrationsFolder);
     await database.db.insert(user).values([
       { id: 'alice', name: 'Alice', email: 'alice@example.test', emailVerified: true },
       { id: 'bob', name: 'Bob', email: 'bob@example.test', emailVerified: true },

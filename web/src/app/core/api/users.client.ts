@@ -4,7 +4,6 @@
  * All software distributed under the RPL is provided strictly on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED, AND LICENSOR HEREBY DISCLAIMS ALL SUCH WARRANTIES, INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT, OR NON-INFRINGEMENT. See the RPL for specific language governing rights and limitations under the RPL.
  */
 
-import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { map, type Observable } from 'rxjs';
 
@@ -14,14 +13,15 @@ import {
   type AssignmentUsersResponse,
 } from '@agentic-software-factory/api-contracts/users';
 import type { FactoryRequestContext } from '../context/factory-context.store';
+import { AgenticSoftwareFactoryAPIService } from '../../generated/api/factory-api';
 
 export type { AssignmentUser };
 
 @Injectable({ providedIn: 'root' })
 export class UsersClient {
-  private readonly http = inject(HttpClient);
+  private readonly api = inject(AgenticSoftwareFactoryAPIService);
   list(context: FactoryRequestContext): Observable<AssignmentUsersResponse> {
-    return this.http.get<unknown>(`/api/v1/users?team=${encodeURIComponent(context.team)}`).pipe(
+    return this.api.getApiV1Users<unknown>({ team: context.team }).pipe(
       map((response) => assignmentUsersResponseSchema.parse(response)),
     );
   }

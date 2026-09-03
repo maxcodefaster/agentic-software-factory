@@ -5,8 +5,8 @@
  */
 
 import { and, eq, gte, sql } from 'drizzle-orm';
-import type { Database } from '../db';
-import { workspaceStartup } from '../db/schema';
+import type { Database } from '@agentic-software-factory/db';
+import { workspaceStartup } from '@agentic-software-factory/db/schema';
 
 export class WorkspaceStartupMetrics {
   constructor(private readonly db: Database, private readonly tenantId: string) {}

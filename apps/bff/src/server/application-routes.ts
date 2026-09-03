@@ -6,14 +6,25 @@
 
 import { capabilitiesFor } from '../auth/authorization';
 import { coderAppUrl, workspaceForApplication } from '../applications/catalog';
-import { applicationsResponseSchema } from '@agentic-software-factory/api-contracts/applications';
 import {
-  applicationParams,
-  applicationWorkspaceParams,
-  emptyBody,
-  reassignApplicationBody,
-  registerApplicationBody,
-} from './schemas';
+  applicationEmptyQuerySchema,
+  applicationsResponseSchema,
+  applicationTeamQuerySchema,
+  developerWorkspaceSchema,
+  onboardedApplicationSchema,
+  onboardingAttemptsResponseSchema,
+  onboardingRepositoriesResponseSchema,
+  reassignApplicationRequestSchema,
+  registerApplicationRequestSchema,
+  remediationResponseSchema,
+} from '@agentic-software-factory/api-contracts/applications';
+import {
+  applicationIdParamSchema,
+  applicationWorkspaceParamsSchema,
+  emptyBodySchema,
+} from '@agentic-software-factory/api-contracts/common';
+import { apiErrorResponses } from '@agentic-software-factory/api-contracts/errors';
+import { t } from 'elysia';
 import {
   applicationForTeam,
   createAuthenticatedApi,
@@ -74,12 +85,18 @@ export function applicationRoutes(services: ServerServices) {
           };
         })),
       });
+    }, {
+      query: applicationTeamQuerySchema,
+      response: { 200: applicationsResponseSchema, ...apiErrorResponses },
     })
     .get('/api/v1/applications/onboarding/repositories', async ({ request, identity }) => {
       const denied = requireCapability(identity!, services, 'applicationsManage', 'developer persona required');
       if (denied) return denied;
       if (!services.applicationOnboarding) return errorResponse(503, 'application onboarding is not configured');
-      return { repositories: await services.applicationOnboarding.availableRepositories(isAdmin(identity!, services) ? undefined : visibleTeams(identity!, services).map((team) => team.slug), request.signal) };
+      return Response.json(validateResponse(onboardingRepositoriesResponseSchema, { repositories: await services.applicationOnboarding.availableRepositories(isAdmin(identity!, services) ? undefined : visibleTeams(identity!, services).map((team) => team.slug), request.signal) }));
+    }, {
+      query: applicationEmptyQuerySchema,
+      response: { 200: onboardingRepositoriesResponseSchema, ...apiErrorResponses },
     })
     .get('/api/v1/applications/onboarding/attempts', async ({ identity }) => {
       const denied = requireCapability(identity!, services, 'applicationsManage', 'developer persona required');
@@ -92,10 +109,13 @@ export function applicationRoutes(services: ServerServices) {
         ...attempts.filter((attempt) => visible.has(attempt.team)).map((attempt) => attempt.systemId),
         ...registrations.filter((registration) => visible.has(registration.team)).map(systemId),
       ]);
-      return {
+      return Response.json(validateResponse(onboardingAttemptsResponseSchema, {
         attempts: attempts.filter((attempt) => visible.has(attempt.team)),
         loadErrors: services.applicationOnboarding.loadErrors().filter((error) => visibleSystemIds.has(error.systemId)),
-      };
+      }));
+    }, {
+      query: applicationEmptyQuerySchema,
+      response: { 200: onboardingAttemptsResponseSchema, ...apiErrorResponses },
     })
     .post('/api/v1/applications/onboarding/register', async ({ body, request, identity }) => {
       const denied = requireCapability(identity!, services, 'applicationsManage', 'developer persona required');
@@ -108,8 +128,12 @@ export function applicationRoutes(services: ServerServices) {
       if (!sourceTeam && !isAdmin(identity!, services)
         && !await services.applicationOnboarding.canRegister(body.repository, [...visible], request.signal)) return errorResponse(404, 'repository not found');
       const application = await services.applicationOnboarding.register(body.repository, body.team, request.signal);
-      return Response.json(onboardedApplication(application), { status: 202 });
-    }, { body: registerApplicationBody })
+      return Response.json(validateResponse(onboardedApplicationSchema, onboardedApplication(application)), { status: 202 });
+    }, {
+      query: applicationEmptyQuerySchema,
+      body: registerApplicationRequestSchema,
+      response: { 202: onboardedApplicationSchema, ...apiErrorResponses },
+    })
     .patch('/api/v1/applications/:id/registration', async ({ params, body, request, identity }) => {
       const denied = requireCapability(identity!, services, 'applicationsManage', 'developer persona required');
       if (denied) return denied;
@@ -117,8 +141,13 @@ export function applicationRoutes(services: ServerServices) {
       const visible = new Set(visibleTeams(identity!, services).map((team) => team.slug));
       if (!visible.has(body.team)) return errorResponse(404, 'team not found');
       if (!visible.has(await services.applicationOnboarding.teamFor(params.id) ?? '')) return errorResponse(404, 'application not found');
-      return onboardedApplication(await services.applicationOnboarding.reassign(params.id, body.team, request.signal));
-    }, { params: applicationParams, body: reassignApplicationBody })
+      return Response.json(validateResponse(onboardedApplicationSchema, onboardedApplication(await services.applicationOnboarding.reassign(params.id, body.team, request.signal))));
+    }, {
+      params: applicationIdParamSchema,
+      query: applicationEmptyQuerySchema,
+      body: reassignApplicationRequestSchema,
+      response: { 200: onboardedApplicationSchema, ...apiErrorResponses },
+    })
     .delete('/api/v1/applications/:id/registration', async ({ params, request, identity }) => {
       const denied = requireCapability(identity!, services, 'applicationsManage', 'developer persona required');
       if (denied) return denied;
@@ -127,15 +156,24 @@ export function applicationRoutes(services: ServerServices) {
       if (!visible.has(await services.applicationOnboarding.teamFor(params.id) ?? '')) return errorResponse(404, 'application not found');
       await services.applicationOnboarding.unregister(params.id, request.signal);
       return new Response(null, { status: 204 });
-    }, { params: applicationParams })
+    }, {
+      params: applicationIdParamSchema,
+      query: applicationEmptyQuerySchema,
+      response: { 204: t.Void(), ...apiErrorResponses },
+    })
     .post('/api/v1/applications/:id/remediation', async ({ params, request, identity }) => {
       const denied = requireCapability(identity!, services, 'applicationsManage', 'developer persona required');
       if (denied) return denied;
       if (!services.applicationOnboarding) return errorResponse(503, 'application onboarding is not configured');
       const visible = new Set(visibleTeams(identity!, services).map((team) => team.slug));
       if (!visible.has(await services.applicationOnboarding.teamFor(params.id) ?? '')) return errorResponse(404, 'application not found');
-      return Response.json(await services.applicationOnboarding.createRemediation(params.id, request.signal), { status: 201 });
-    }, { params: applicationParams, body: emptyBody })
+      return Response.json(validateResponse(remediationResponseSchema, await services.applicationOnboarding.createRemediation(params.id, request.signal)), { status: 201 });
+    }, {
+      params: applicationIdParamSchema,
+      query: applicationEmptyQuerySchema,
+      body: emptyBodySchema,
+      response: { 201: remediationResponseSchema, ...apiErrorResponses },
+    })
     .post('/api/v1/applications/:id/staging/retry', async ({ params, request, identity }) => {
       const denied = requireCapability(identity!, services, 'applicationsManage', 'developer persona required');
       if (denied) return denied;
@@ -144,7 +182,12 @@ export function applicationRoutes(services: ServerServices) {
       if (!await applicationForTeam(params.id, scope.team!, services)) return errorResponse(404, 'application not found');
       await services.staging.retry(params.id, request.signal);
       return new Response(null, { status: 202 });
-    }, { params: applicationParams, body: emptyBody })
+    }, {
+      params: applicationIdParamSchema,
+      query: applicationTeamQuerySchema,
+      body: emptyBodySchema,
+      response: { 202: t.Void(), ...apiErrorResponses },
+    })
     .get('/api/v1/applications/:id/workspaces/:workspaceId', async ({ params, request, identity }) => {
       const denied = requireCapability(identity!, services, 'developerWorkspaceCreate', 'developer persona required');
       if (denied) return denied;
@@ -152,8 +195,12 @@ export function applicationRoutes(services: ServerServices) {
       const application = await applicationForTeam(params.id, scope.team!, services);
       if (!application) return errorResponse(404, 'application not found');
       const workspace = await services.coder.developerWorkspaceById(application, params.workspaceId, scope);
-      return developerWorkspaceResponse(workspace, services.coderPublicUrl);
-    }, { params: applicationWorkspaceParams })
+      return Response.json(validateResponse(developerWorkspaceSchema, developerWorkspaceResponse(workspace, services.coderPublicUrl)));
+    }, {
+      params: applicationWorkspaceParamsSchema,
+      query: applicationTeamQuerySchema,
+      response: { 200: developerWorkspaceSchema, ...apiErrorResponses },
+    })
     .post('/api/v1/applications/:id/workspace', async ({ params, request, identity }) => {
       const denied = requireCapability(identity!, services, 'developerWorkspaceCreate', 'developer persona required');
       if (denied) return denied;
@@ -164,8 +211,17 @@ export function applicationRoutes(services: ServerServices) {
       const workspace = services.measureWorkspaceStartup
         ? await services.measureWorkspaceStartup({ systemId: application.id, kind: 'developer', sha: application.defaultSha, contractVersion: 1, cacheKey: `v1:${application.defaultSha}` }, create)
         : await create();
-      return Response.json(developerWorkspaceResponse(workspace, services.coderPublicUrl), { status: workspace.healthy && workspace.ideUrl ? 201 : 202 });
-    }, { params: applicationParams, body: emptyBody });
+      return Response.json(validateResponse(developerWorkspaceSchema, developerWorkspaceResponse(workspace, services.coderPublicUrl)), { status: workspace.healthy && workspace.ideUrl ? 201 : 202 });
+    }, {
+      params: applicationIdParamSchema,
+      query: applicationTeamQuerySchema,
+      body: emptyBodySchema,
+      response: {
+        201: developerWorkspaceSchema,
+        202: developerWorkspaceSchema,
+        ...apiErrorResponses,
+      },
+    });
 }
 
 function developerWorkspaceResponse(workspace: import('./types').Workspace, coderPublicUrl: string) {

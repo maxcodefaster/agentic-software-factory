@@ -11,6 +11,7 @@ if grep -Ern --include='*.ts' --include='*.tsx' --include='*.tf' --include='*.ya
   --exclude='*.test.ts' --exclude='*.spec.ts' --exclude='validate.sh' \
   "$patterns" \
   "$root/apps/bff/src" \
+  "$root/packages/db/src" \
   "$root/templates/agentic-software-factory" \
   "$root/deploy/production"; then
   printf '%s\n' 'Production or generic automation contains a demo/customer coupling.' >&2

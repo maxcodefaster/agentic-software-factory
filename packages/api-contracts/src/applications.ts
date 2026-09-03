@@ -5,6 +5,13 @@
  */
 
 import { z } from 'zod';
+import { identifierSchema } from './common';
+
+export const applicationTeamQuerySchema = z.object({
+  team: identifierSchema.optional(),
+}).strict();
+
+export const applicationEmptyQuerySchema = z.object({}).strict();
 
 export const workspaceAppSchema = z.object({
   slug: z.string(),
@@ -53,7 +60,7 @@ export const developerWorkspaceSchema = z.object({
   terminalUrl: z.string().nullable(),
   servicesUrl: z.string().nullable(),
   apps: z.array(workspaceAppSchema),
-});
+}).strict();
 export type DeveloperWorkspace = z.infer<typeof developerWorkspaceSchema>;
 
 export const onboardingRepositorySchema = z.object({
@@ -62,19 +69,19 @@ export const onboardingRepositorySchema = z.object({
   description: z.string(),
   defaultBranch: z.string(),
   repositoryUrl: z.string(),
-});
+}).strict();
 export type OnboardingRepository = z.infer<typeof onboardingRepositorySchema>;
 
 export const onboardingRepositoriesResponseSchema = z.object({
   repositories: z.array(onboardingRepositorySchema),
-});
+}).strict();
 export type OnboardingRepositoriesResponse = z.infer<typeof onboardingRepositoriesResponseSchema>;
 
 export const compatibilityIssueSchema = z.object({
   path: z.string(),
   code: z.string(),
   message: z.string(),
-});
+}).strict();
 
 export const onboardingPhaseSchema = z.enum(['validating', 'applying-access', 'applying-policy', 'creating-staging', 'ready', 'retry-wait', 'repair', 'failed', 'reassigning', 'reassigning-access', 'unregistering', 'removed']);
 export type OnboardingPhase = z.infer<typeof onboardingPhaseSchema>;
@@ -93,20 +100,25 @@ export const onboardingAttemptSchema = z.object({
   attempts: z.number().int().nonnegative(),
   nextAttemptAt: z.string().nullable(),
   updatedAt: z.string(),
-});
+}).strict();
 export type OnboardingAttempt = z.infer<typeof onboardingAttemptSchema>;
 
 export const onboardingAttemptsResponseSchema = z.object({
   attempts: z.array(onboardingAttemptSchema),
-  loadErrors: z.array(z.object({ systemId: z.string(), error: z.string() })).default([]),
-});
+  loadErrors: z.array(z.object({ systemId: z.string(), error: z.string() }).strict()).default([]),
+}).strict();
 export type OnboardingAttemptsResponse = z.infer<typeof onboardingAttemptsResponseSchema>;
 
 export const registerApplicationRequestSchema = z.object({
-  repository: z.string().min(1),
-  team: z.string().min(1),
+  repository: z.string().min(1).max(100),
+  team: identifierSchema,
 }).strict();
 export type RegisterApplicationRequest = z.infer<typeof registerApplicationRequestSchema>;
+
+export const reassignApplicationRequestSchema = z.object({
+  team: identifierSchema,
+}).strict();
+export type ReassignApplicationRequest = z.infer<typeof reassignApplicationRequestSchema>;
 
 export const onboardedApplicationSchema = z.object({
   id: z.string(),
@@ -114,7 +126,7 @@ export const onboardedApplicationSchema = z.object({
   name: z.string(),
   description: z.string(),
   repositoryUrl: z.string(),
-});
+}).strict();
 export type OnboardedApplication = z.infer<typeof onboardedApplicationSchema>;
 
 export const remediationResponseSchema = z.object({

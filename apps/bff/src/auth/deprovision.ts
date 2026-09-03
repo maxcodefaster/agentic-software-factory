@@ -6,7 +6,7 @@
 
 import { and, eq, inArray, isNull, ne, or, sql } from 'drizzle-orm';
 
-import type { Database } from '../db';
+import type { Database } from '@agentic-software-factory/db';
 import {
   account,
   coderUserBinding,
@@ -21,7 +21,7 @@ import {
   session,
   systemRegistration,
   user,
-} from '../db/schema';
+} from '@agentic-software-factory/db/schema';
 import { deliveryBranchName } from '../implementation/store';
 
 export interface DeprovisionedUser {

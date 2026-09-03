@@ -10,7 +10,8 @@ import { HlmInput } from '@spartan-ng/helm/input';
 import { TranslocoPipe, TranslocoService } from '@jsverse/transloco';
 
 import type { ApplicationSummary } from '@agentic-software-factory/api-contracts/applications';
-import type { CreateCardInput, KanbanColumnId } from '@agentic-software-factory/api-contracts/kanban';
+import type { KanbanColumnId } from '@agentic-software-factory/api-contracts/kanban';
+import type { CreateCardInput } from '../../core/api/kanban.types';
 import type { FactoryRequestContext } from '../../core/context/factory-context.store';
 import { Icon } from '../../shared/icon/icon';
 import { Overlay } from '../../shared/overlay/overlay';

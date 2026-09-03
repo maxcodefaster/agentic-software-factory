@@ -10,9 +10,10 @@ import { of } from 'rxjs';
 
 import type { ApplicationSummary } from '@agentic-software-factory/api-contracts/applications';
 import type { ImplementationRun } from '@agentic-software-factory/api-contracts/implementation';
-import type { KanbanCard, RequirementSpec } from '@agentic-software-factory/api-contracts/kanban';
+import type { RequirementSpec } from '@agentic-software-factory/api-contracts/kanban';
 import { ImplementationClient } from '../../core/api/implementation.client';
 import { KanbanInterviewClient } from '../../core/api/kanban-interview.client';
+import type { KanbanCard } from '../../core/api/kanban.types';
 import { UsersClient } from '../../core/api/users.client';
 import { CardDetail } from './card-detail';
 

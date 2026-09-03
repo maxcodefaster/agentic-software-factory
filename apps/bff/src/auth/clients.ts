@@ -6,8 +6,8 @@
 
 import { eq } from 'drizzle-orm';
 
-import type { Database } from '../db';
-import { oauthClient } from '../db/schema';
+import type { Database } from '@agentic-software-factory/db';
+import { oauthClient } from '@agentic-software-factory/db/schema';
 import type { ConfidentialClientConfig, FactoryAuthConfig } from './config';
 import { OIDC_SCOPES } from './config';
 import { sha256Base64Url } from './security';

@@ -6,8 +6,8 @@
 
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { resolve } from 'node:path';
-import { createDatabase } from '../db';
-import { closeDatabase, migrateDatabase } from '../db/migrate';
+import { createDatabase } from '@agentic-software-factory/db';
+import { bundledMigrationsFolder, closeDatabase, migrateDatabase } from '@agentic-software-factory/db/migrate';
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 const database = databaseUrl ? createDatabase(databaseUrl) : null;
@@ -16,7 +16,7 @@ const port = 18_000 + Math.floor(Math.random() * 1_000);
 
 beforeAll(async () => {
   if (!database || !databaseUrl) return;
-  await migrateDatabase(database.db, resolve(import.meta.dir, '../../drizzle'));
+  await migrateDatabase(database.db, bundledMigrationsFolder);
   child = Bun.spawn(['bun', 'src/main.ts'], {
     cwd: resolve(import.meta.dir, '../..'),
     stdout: 'pipe', stderr: 'pipe',
@@ -67,6 +67,6 @@ test.skipIf(!databaseUrl)('rejects API mutation while external actors are unavai
   });
 
   expect(response.status).toBe(503);
-  expect(await response.json()).toEqual({ error: 'external services are not ready' });
+  expect(await response.json()).toEqual({ error: 'external services are not ready', code: 'service_unavailable' });
   expect((await fetch(`http://127.0.0.1:${port}/auth/logout`, { method: 'POST', redirect: 'manual' })).status).toBe(303);
 });

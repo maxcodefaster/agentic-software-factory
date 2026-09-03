@@ -4,10 +4,11 @@
  * All software distributed under the RPL is provided strictly on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED, AND LICENSOR HEREBY DISCLAIMS ALL SUCH WARRANTIES, INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT, OR NON-INFRINGEMENT. See the RPL for specific language governing rights and limitations under the RPL.
  */
 
-import { HttpClient, HttpErrorResponse } from '@angular/common/http';
+import { HttpErrorResponse } from '@angular/common/http';
 import { computed, Injectable, inject, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { sessionResponseSchema, type FactoryCapabilities, type SessionUser } from '@agentic-software-factory/api-contracts/session';
+import { AgenticSoftwareFactoryAPIService } from '../../generated/api/factory-api';
 
 export type AuthState = 'loading' | 'authenticated' | 'anonymous' | 'unavailable';
 
@@ -26,7 +27,7 @@ const NO_CAPABILITIES: FactoryCapabilities = {
  */
 @Injectable({ providedIn: 'root' })
 export class AuthService {
-  private readonly http = inject(HttpClient);
+  private readonly api = inject(AgenticSoftwareFactoryAPIService);
 
   private readonly _user = signal<SessionUser | null>(null);
   private readonly _state = signal<AuthState>('loading');
@@ -61,7 +62,7 @@ export class AuthService {
   async hydrate(): Promise<void> {
     this._state.set('loading');
     try {
-      const session = await firstValueFrom(this.http.get<unknown>('/api/v1/session'));
+      const session = await firstValueFrom(this.api.getApiV1Session<unknown>());
       const user = sessionResponseSchema.parse(session);
       this._user.set(user);
       this._state.set(user ? 'authenticated' : 'anonymous');

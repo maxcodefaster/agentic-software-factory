@@ -4,17 +4,17 @@
  * All software distributed under the RPL is provided strictly on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED, AND LICENSOR HEREBY DISCLAIMS ALL SUCH WARRANTIES, INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT, OR NON-INFRINGEMENT. See the RPL for specific language governing rights and limitations under the RPL.
  */
 
-import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { monitoringResponseSchema, type MonitoringResponse } from '@agentic-software-factory/api-contracts/monitoring';
 import { map, type Observable } from 'rxjs';
+import { AgenticSoftwareFactoryAPIService } from '../../generated/api/factory-api';
 
 @Injectable({ providedIn: 'root' })
 export class MonitoringClient {
-  private readonly http = inject(HttpClient);
+  private readonly api = inject(AgenticSoftwareFactoryAPIService);
 
   getWorkspaceMonitoring(): Observable<MonitoringResponse> {
-    return this.http.get<unknown>('/api/v1/governance').pipe(
+    return this.api.getApiV1Governance<unknown>().pipe(
       map((response) => monitoringResponseSchema.parse(response)),
     );
   }

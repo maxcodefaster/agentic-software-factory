@@ -20,6 +20,32 @@ import {
   uniqueIndex,
 } from 'drizzle-orm/pg-core';
 
+export interface PersistedApplicationDefinition {
+  id: string;
+  name: string;
+  description: string;
+  repositoryUrl: string;
+  cloneUrl: string;
+  defaultBranch: string;
+  defaultSha: string;
+  systemContext?: string;
+  team: string;
+  repositoryOwner: string;
+  repositoryName: string;
+  declaredApps: Array<{ slug: string; displayName: string }>;
+  workspaceApps?: Array<{
+    slug: string;
+    displayName?: string;
+    url: string;
+    icon?: string;
+    openIn?: 'tab' | 'slim-window';
+    share?: 'owner' | 'authenticated';
+    group?: string;
+    order?: number;
+    healthCheck?: { url: string; interval: number; threshold: number };
+  }>;
+}
+
 const timestamps = {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -278,7 +304,7 @@ export const systemRegistration = pgTable(
     teamId: text('team_id').notNull(),
     forgejoOwner: text('forgejo_owner').notNull(),
     forgejoRepository: text('forgejo_repository').notNull(),
-    projection: jsonb('projection').$type<import('../applications/catalog').ApplicationDefinition>(),
+    projection: jsonb('projection').$type<PersistedApplicationDefinition>(),
     projectionUpdatedAt: timestamp('projection_updated_at', { withTimezone: true }),
     projectionError: text('projection_error'),
     projectionErrorAt: timestamp('projection_error_at', { withTimezone: true }),

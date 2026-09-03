@@ -5,9 +5,12 @@
  */
 
 import type { Database } from './index';
+import { resolve } from 'node:path';
 import type postgres from 'postgres';
 import { readMigrationFiles } from 'drizzle-orm/migrator';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
+
+export const bundledMigrationsFolder = resolve(import.meta.dir, '../drizzle');
 
 export async function migrateDatabase(db: Database, migrationsFolder: string): Promise<void> {
   await assertCompatibleBaseline(db, migrationsFolder);

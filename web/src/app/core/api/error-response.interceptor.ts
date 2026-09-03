@@ -12,7 +12,16 @@ import { errorResponseSchema } from '@agentic-software-factory/api-contracts/err
 export const errorResponseInterceptor: HttpInterceptorFn = (request, next) => next(request).pipe(
   catchError((error: unknown) => {
     if (error instanceof HttpErrorResponse && error.status > 0 && request.url.startsWith('/api/v1/')) {
-      errorResponseSchema.parse(error.error);
+      const parsed = errorResponseSchema.safeParse(error.error);
+      if (!parsed.success) {
+        return throwError(() => new HttpErrorResponse({
+          error: { error: 'malformed API error response', code: 'internal_error' },
+          headers: error.headers,
+          status: error.status,
+          statusText: error.statusText,
+          url: error.url ?? undefined,
+        }));
+      }
     }
     return throwError(() => error);
   }),

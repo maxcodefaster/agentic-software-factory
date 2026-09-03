@@ -4,7 +4,7 @@
  * All software distributed under the RPL is provided strictly on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED, AND LICENSOR HEREBY DISCLAIMS ALL SUCH WARRANTIES, INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT, OR NON-INFRINGEMENT. See the RPL for specific language governing rights and limitations under the RPL.
  */
 
-import type { Database } from '../db';
+import type { Database } from '@agentic-software-factory/db';
 import { createFactoryAuth } from './better-auth';
 import { bootstrapLocalUser } from './bootstrap-user';
 import { bootstrapConfidentialClients } from './clients';

@@ -102,6 +102,7 @@ describe("factory command", () => {
   test("checks omit root orchestration, include every local contract, and omit example release checks", async () => {
     const commands = checkCommands.map(({ argv }) => argv.join(" ")).join("\n");
     expect(commands).not.toContain(["release", "check"].join(":"));
+    expect(commands).toContain("bun run api:check");
     const tests = Array.from(new Bun.Glob("*.sh").scanSync(new URL("../deploy/local/tests", import.meta.url).pathname)).sort();
     for (const test of tests) expect(commands).toContain(`deploy/local/tests/${test}`);
   });
@@ -110,10 +111,12 @@ describe("factory command", () => {
     const source = await Bun.$`mktemp -d`.text().then((value) => value.trim());
     const context = await Bun.$`mktemp -d`.text().then((value) => value.trim());
     try {
-      await Bun.$`mkdir -p ${source}/apps/bff/src ${source}/deploy/local ${source}/packages/api-contracts ${source}/packages/design-system ${source}/web`;
+      await Bun.$`mkdir -p ${source}/apps/bff/src ${source}/deploy/local ${source}/packages/api-contracts ${source}/packages/db ${source}/packages/design-system ${source}/web`;
       await Bun.write(`${source}/apps/bff/src/main.ts`, "head\n");
       await Bun.write(`${source}/apps/bff/Dockerfile`, "FROM scratch\n");
       await Bun.write(`${source}/deploy/local/bootstrap-users.ts`, "export {};\n");
+      await Bun.write(`${source}/packages/db/package.json`, "{}\n");
+      await Bun.write(`${source}/packages/db/schema.ts`, "export {};\n");
       for (const file of [".dockerignore", "package.json", "bun.lock", "LICENSE", "NOTICE", "THIRD_PARTY_NOTICES"]) await Bun.write(`${source}/${file}`, `${file}\n`);
       await Bun.$`git -C ${source} init -q`;
       await Bun.$`git -C ${source} config user.name contract`;
@@ -133,6 +136,7 @@ describe("factory command", () => {
       const untracked = await digest();
       expect(new Set([head, staged, unstaged, untracked]).size).toBe(4);
       expect(await Bun.file(`${context}/apps/bff/src/untracked.ts`).text()).toBe("untracked\n");
+      expect(await Bun.file(`${context}/packages/db/schema.ts`).text()).toBe("export {};\n");
       await Bun.$`rm -rf ${context}`; await Bun.$`mkdir ${context}`;
       expect(await digest()).toBe(untracked);
       await Bun.$`chmod 755 ${source}/apps/bff/src/main.ts`;
@@ -158,7 +162,7 @@ describe("factory command", () => {
     const source = await Bun.$`mktemp -d`.text().then((value) => value.trim());
     const context = await Bun.$`mktemp -d`.text().then((value) => value.trim());
     try {
-      await Bun.$`mkdir -p ${source}/apps/bff ${source}/deploy/local ${source}/packages/api-contracts ${source}/packages/design-system ${source}/web`;
+      await Bun.$`mkdir -p ${source}/apps/bff ${source}/deploy/local ${source}/packages/api-contracts ${source}/packages/db ${source}/packages/design-system ${source}/web`;
       for (const file of [".dockerignore", "package.json", "bun.lock", "LICENSE", "NOTICE", "THIRD_PARTY_NOTICES", "apps/bff/package.json", "deploy/local/bootstrap-users.ts"]) {
         await Bun.write(`${source}/${file}`, `${file}\n`);
       }

@@ -9,8 +9,8 @@ import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { genericOAuth, jwt } from 'better-auth/plugins';
 
-import type { Database } from '../db';
-import { authSchema } from '../db/schema';
+import type { Database } from '@agentic-software-factory/db';
+import { authSchema } from '@agentic-software-factory/db/schema';
 import type { FactoryAuthConfig } from './config';
 import { OIDC_SCOPES } from './config';
 

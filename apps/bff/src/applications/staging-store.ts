@@ -5,8 +5,8 @@
  */
 
 import { and, eq, inArray, isNull, lt, or, sql } from 'drizzle-orm';
-import type { Database } from '../db';
-import { stagingReconciliation, stagingReconciliationEvent, systemRegistration } from '../db/schema';
+import type { Database } from '@agentic-software-factory/db';
+import { stagingReconciliation, stagingReconciliationEvent, systemRegistration } from '@agentic-software-factory/db/schema';
 import type { CoderWorkspace } from '../integrations/coder';
 
 export interface StagingRecord {

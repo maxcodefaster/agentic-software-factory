@@ -10,7 +10,7 @@ import { z } from 'zod';
 import { validateResponse } from './response-contracts';
 
 describe('validateResponse', () => {
-  test('rejects malformed BFF projections outside production', () => {
+  test('rejects malformed BFF projections', () => {
     expect(() => validateResponse(z.object({ id: z.string() }).strict(), { id: 7 })).toThrow();
   });
 });

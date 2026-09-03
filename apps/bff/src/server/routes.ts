@@ -5,17 +5,15 @@
  */
 
 import { Elysia } from 'elysia';
-import { applicationRoutes } from './application-routes';
 import { createHttpBoundary, parseBoundedJson } from './boundary';
-import { diagnosticsApiRoutes, diagnosticsAuthRoutes } from './diagnostics-auth-routes';
-import { implementationRoutes } from './implementation-routes';
+import { diagnosticsAuthRoutes } from './diagnostics-auth-routes';
+import { factoryApiRoutes } from './factory-api-routes';
 import {
   createInterviewOperationReconciler,
   type InterviewOperationReconciler,
 } from './interview-operations';
 import { mcpStaticRoutes } from './mcp-static-routes';
 import { errorResponse, mapError } from './route-support';
-import { requirementRoutes } from './requirement-routes';
 import type { ServerServices } from './types';
 
 export { createInterviewOperationReconciler } from './interview-operations';
@@ -36,7 +34,9 @@ export function createServer(
       : null)
     .onError(({ error, code, request, set }) => {
       const response = code === 'VALIDATION'
-        ? errorResponse(400, 'invalid request')
+        ? error.type === 'response'
+          ? mapError(new Error('response validation failed'), 500, (mapped) => boundary.recordError(request, mapped))
+          : errorResponse(400, 'invalid request')
         : code === 'PARSE' && !(typeof error === 'object' && error && 'status' in error)
           ? errorResponse(400, 'invalid request')
           : mapError(error, 500, (mapped) => boundary.recordError(request, mapped));
@@ -46,9 +46,6 @@ export function createServer(
     .onAfterResponse((context) => boundary.onAfterResponse(context))
     .options('/*', () => new Response(null, { status: 204 }))
     .use(diagnosticsAuthRoutes(services, startedAt))
-    .use(diagnosticsApiRoutes(services))
-    .use(applicationRoutes(services))
-    .use(requirementRoutes(services, interviewOperations, recordError))
-    .use(implementationRoutes(services, recordError))
+    .use(factoryApiRoutes(services, interviewOperations, recordError))
     .use(mcpStaticRoutes(services));
 }

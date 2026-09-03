@@ -5,10 +5,61 @@
  */
 
 import { z } from 'zod';
+import { identifierSchema, isoInstantSchema } from './common';
 import { implementationPhaseSchema } from './implementation';
 
 export const kanbanColumnIdSchema = z.enum(['ideation', 'requirements', 'implementation', 'done']);
 export type KanbanColumnId = z.infer<typeof kanbanColumnIdSchema>;
+
+export const createRequirementBodySchema = z.object({
+  title: z.string().min(1).max(256),
+  body: z.string().min(1).max(100_000),
+  team: identifierSchema.optional(),
+  applicationIds: z.array(identifierSchema).length(1).optional(),
+  assignee: identifierSchema.nullable().optional(),
+}).strict();
+
+export const updateRequirementBodySchema = z.object({
+  title: z.string().max(256).optional(),
+  body: z.string().max(100_000).optional(),
+  assignee: identifierSchema.nullable().optional(),
+  applicationIds: z.array(identifierSchema).length(1).optional(),
+  expectedUpdatedAt: isoInstantSchema.optional(),
+}).strict();
+
+export const transitionRequirementBodySchema = z.object({
+  status: kanbanColumnIdSchema,
+  expectedUpdatedAt: isoInstantSchema.optional(),
+}).strict();
+
+const requirementSpecListItemSchema = z.string().max(2_000);
+const requirementSpecListSchema = z.array(requirementSpecListItemSchema).max(100);
+
+export const requirementSpecBodySchema = z.object({
+  goal: z.string().min(1).max(10_000),
+  users: requirementSpecListSchema,
+  userStories: requirementSpecListSchema,
+  acceptanceCriteria: requirementSpecListSchema.min(1),
+  nonFunctionalRequirements: requirementSpecListSchema,
+  moscow: z.object({
+    must: requirementSpecListSchema,
+    should: requirementSpecListSchema,
+    could: requirementSpecListSchema,
+  }).strict(),
+  openQuestions: requirementSpecListSchema,
+  nonGoals: requirementSpecListSchema,
+}).strict();
+
+export const answerInterviewBodySchema = z.object({
+  questionId: identifierSchema,
+  expectedVersion: z.number().int().nonnegative(),
+  selected: z.array(identifierSchema).max(50),
+  customText: z.string().max(10_000),
+}).strict();
+
+export const sharpenInterviewBodySchema = z.object({
+  note: z.string().min(1).max(10_000),
+}).strict();
 
 export const applicationRefSchema = z.object({ id: z.string(), name: z.string() }).strict();
 export type ApplicationRef = z.infer<typeof applicationRefSchema>;
@@ -135,50 +186,6 @@ export type InterviewResponse = z.infer<typeof interviewResponseSchema>;
 
 export const interviewStateResponseSchema = z.object({ state: interviewStateSchema }).strict();
 
-export const kanbanCardSchema = z.object({
-  id: z.string(),
-  number: z.number(),
-  systemId: z.string().optional(),
-  url: z.string(),
-  title: z.string(),
-  description: z.string(),
-  column: kanbanColumnIdSchema,
-  teamSlug: z.string(),
-  createdBy: z.string(),
-  createdByEmail: z.string(),
-  assignee: z.string().nullable(),
-  position: z.number(),
-  meta: z.record(z.string(), z.unknown()),
-  applications: z.array(applicationRefSchema).default([]),
-  deliveryPhase: implementationPhaseSchema.nullable().default(null),
-  deliveryLabel: z.string().nullable().default(null),
-  deliveryBlockers: z.array(z.string()).default([]),
-  createdAt: z.string(),
-  updatedAt: z.string(),
-});
-export type KanbanCard = z.infer<typeof kanbanCardSchema>;
-
-export const kanbanColumnSchema = z.object({
-  id: kanbanColumnIdSchema,
-  label: z.string(),
-  hint: z.string(),
-  cards: z.array(kanbanCardSchema),
-});
-export type KanbanColumn = z.infer<typeof kanbanColumnSchema>;
-
-export const kanbanBoardSchema = z.object({
-  generatedAt: z.string(),
-  columns: z.array(kanbanColumnSchema),
-  application: applicationRefSchema.nullable(),
-});
-export type KanbanBoard = z.infer<typeof kanbanBoardSchema>;
-
-export interface KanbanBoardPage extends KanbanBoard {
-  total: number | null;
-  truncated: boolean;
-  nextCursor: string | null;
-}
-
 export const boardCardSchema = z.object({
   number: z.number().int().positive(),
   systemId: z.string().optional(),
@@ -224,16 +231,6 @@ export const boardResponseSchema = z.object({
 );
 export type BoardResponse = z.infer<typeof boardResponseSchema>;
 
-export const createCardInputSchema = z.object({
-  title: z.string(),
-  description: z.string().optional(),
-  column: kanbanColumnIdSchema.optional(),
-  teamSlug: z.string(),
-  applicationIds: z.array(z.string()).length(1).optional(),
-  assignee: z.string().nullable().optional(),
-});
-export type CreateCardInput = z.infer<typeof createCardInputSchema>;
-
 export const cardEventSchema = z.object({
   id: z.string(),
   type: z.string(),
@@ -244,3 +241,5 @@ export const cardEventSchema = z.object({
 export type CardEvent = z.infer<typeof cardEventSchema>;
 
 export const cardEventsResponseSchema = z.object({ events: z.array(cardEventSchema) }).strict();
+
+export const noContentResponseSchema = z.void();

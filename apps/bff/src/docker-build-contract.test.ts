@@ -17,6 +17,7 @@ test("the BFF image shares one cached Bun dependency install", () => {
 
 test("the Bun runtime contains only bundled BFF and web artifacts", () => {
   expect(runtime).toContain("COPY --from=bff-build /src/apps/bff/dist ./dist");
+  expect(runtime).toContain("COPY packages/db/drizzle ./drizzle");
   expect(runtime).toContain("COPY --from=web-build /src/web/dist/portal/browser ./web");
   expect(runtime).not.toContain("dist/public/auth");
   expect(runtime).not.toContain("./web/auth");
@@ -43,10 +44,15 @@ test("the BFF build has no server auth presentation pipeline", () => {
   expect(dockerfile).not.toContain("build-auth-assets");
 });
 
+test("the BFF build includes the database workspace", () => {
+  expect(dockerfile).toContain("COPY packages/db/package.json ./packages/db/package.json");
+  expect(dockerfile).toContain("COPY packages/db ./packages/db");
+});
+
 test("the Docker build context uses a source allowlist", async () => {
   const ignore = await Bun.file(new URL("../Dockerfile.dockerignore", import.meta.url)).text();
   expect(ignore).toMatch(/^\*\*$/m);
-  for (const path of ["apps/bff/src/**", "apps/bff/drizzle/**", "packages/api-contracts/**", "packages/design-system/**", "web/src/**", "web/public/**"]) {
+  for (const path of ["apps/bff/src/**", "packages/api-contracts/**", "packages/db/**", "packages/design-system/**", "web/src/**", "web/public/**"]) {
     expect(ignore).toContain(`!${path}`);
   }
   expect(ignore).not.toContain("!node_modules");

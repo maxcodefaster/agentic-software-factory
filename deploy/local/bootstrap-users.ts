@@ -4,8 +4,8 @@
  * All software distributed under the RPL is provided strictly on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED, AND LICENSOR HEREBY DISCLAIMS ALL SUCH WARRANTIES, INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT, OR NON-INFRINGEMENT. See the RPL for specific language governing rights and limitations under the RPL.
  */
 
-import { createDatabase } from '../../apps/bff/src/db';
-import { closeDatabase } from '../../apps/bff/src/db/migrate';
+import { createDatabase } from '@agentic-software-factory/db';
+import { closeDatabase } from '@agentic-software-factory/db/migrate';
 import { bootstrapLocalUser } from '../../apps/bff/src/auth/bootstrap-user';
 
 function required(name: string): string {

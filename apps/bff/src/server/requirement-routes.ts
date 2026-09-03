@@ -5,16 +5,29 @@
  */
 
 import {
-  answerBody,
-  createRequirementBody,
-  emptyBody,
-  numberParams,
-  requirementSpecBody,
-  sharpenBody,
-  transitionBody,
-  updateRequirementBody,
-} from './schemas';
-import { boardResponseSchema } from '@agentic-software-factory/api-contracts/kanban';
+  answerInterviewBodySchema,
+  boardCardSchema,
+  boardResponseSchema,
+  cardEventsResponseSchema,
+  createRequirementBodySchema,
+  interviewResponseSchema,
+  interviewStateResponseSchema,
+  requirementAcceptanceSchema,
+  requirementProposalSchema,
+  requirementSpecBodySchema,
+  sharpenInterviewBodySchema,
+  transitionRequirementBodySchema,
+  updateRequirementBodySchema,
+} from '@agentic-software-factory/api-contracts/kanban';
+import {
+  boardQuerySchema,
+  emptyBodySchema,
+  issueNumberParamSchema,
+  requestContextQuerySchema,
+} from '@agentic-software-factory/api-contracts/common';
+import { apiErrorResponses } from '@agentic-software-factory/api-contracts/errors';
+import { t } from 'elysia';
+import type { ZodType } from 'zod';
 import {
   actor,
   applicationIdsBelongToTeam,
@@ -31,6 +44,14 @@ import {
 import { answerInterview, sharpenInterview, startInterview, type InterviewOperationReconciler } from './interview-operations';
 import type { ServerServices } from './types';
 import { validateResponse } from './response-contracts';
+
+async function validatedJsonResult<T>(schema: ZodType<T>, result: unknown, status = 200): Promise<Response> {
+  if (result instanceof Response) {
+    if (!result.ok) return result;
+    return Response.json(validateResponse(schema, await result.json()), { status: result.status });
+  }
+  return Response.json(validateResponse(schema, result), { status });
+}
 
 export function requirementRoutes(
   services: ServerServices,
@@ -51,7 +72,7 @@ export function requirementRoutes(
       const names = new Map(definitions.map((item) => [item.id, item.name]));
       const application = typeof query['application'] === 'string' ? query['application'] : '';
       if (application && !names.has(application)) return errorResponse(404, 'application not found');
-      return validateResponse(boardResponseSchema, {
+      return Response.json(validateResponse(boardResponseSchema, {
         ...board,
         columns: Object.fromEntries(
           Object.entries(board.columns).map(([status, cards]) => [
@@ -74,8 +95,8 @@ export function requirementRoutes(
               .filter((card) => !application || card.applications?.some((item) => item.id === application)),
           ]),
         ),
-      });
-    })
+      }));
+    }, { query: boardQuerySchema, response: { 200: boardResponseSchema, ...apiErrorResponses } })
     .post('/api/v1/requirements', async ({ body, request, identity }) => {
       const denied = requireCapability(identity!, services, 'requirementsCreate', 'business persona required');
       if (denied) return denied;
@@ -99,8 +120,12 @@ export function requirementRoutes(
           scope,
         );
       }
-      return Response.json(card, { status: 201 });
-    }, { body: createRequirementBody })
+      return Response.json(validateResponse(boardCardSchema, card), { status: 201 });
+    }, {
+      query: requestContextQuerySchema,
+      body: createRequirementBodySchema,
+      response: { 201: boardCardSchema, ...apiErrorResponses },
+    })
     .patch('/api/v1/requirements/:number', async ({ params, body, request, identity }) => {
       const denied = requireCapability(identity!, services, 'requirementsEdit', 'business persona required');
       if (denied) return denied;
@@ -119,8 +144,16 @@ export function requirementRoutes(
           return errorResponse(409, 'accepted requirements cannot be edited');
         }
       }
-      return services.forgejo.updateRequirement(issueNumber(params.number), body, scope);
-    }, { params: numberParams, body: updateRequirementBody })
+      return Response.json(validateResponse(
+        boardCardSchema,
+        await services.forgejo.updateRequirement(issueNumber(params.number), body, scope),
+      ));
+    }, {
+      params: issueNumberParamSchema,
+      query: requestContextQuerySchema,
+      body: updateRequirementBodySchema,
+      response: { 200: boardCardSchema, ...apiErrorResponses },
+    })
     .delete('/api/v1/requirements/:number', async ({ params, request, identity }) => {
       const denied = requireCapability(identity!, services, 'requirementsClose', 'business persona required');
       if (denied) return denied;
@@ -132,7 +165,11 @@ export function requirementRoutes(
       }
       await services.forgejo.closeRequirement(number, scope);
       return new Response(null, { status: 204 });
-    }, { params: numberParams })
+    }, {
+      params: issueNumberParamSchema,
+      query: requestContextQuerySchema,
+      response: { 204: t.Void(), ...apiErrorResponses },
+    })
     .patch('/api/v1/requirements/:number/status', async ({ params, body, request, identity }) => {
       const denied = requireCapability(identity!, services, 'requirementsMove', 'business persona required');
       if (denied) return denied;
@@ -145,22 +182,71 @@ export function requirementRoutes(
       const current = card.status;
       if (!current) return errorResponse(404, 'requirement not found');
       if (order.indexOf(body.status) < order.indexOf(current)) return errorResponse(409, 'requirements cannot move backward');
-      return services.forgejo.transition(number, body.status, body.expectedUpdatedAt, scope);
-    }, { params: numberParams, body: transitionBody })
+      return Response.json(validateResponse(
+        boardCardSchema,
+        await services.forgejo.transition(number, body.status, body.expectedUpdatedAt, scope),
+      ));
+    }, {
+      params: issueNumberParamSchema,
+      query: requestContextQuerySchema,
+      body: transitionRequirementBodySchema,
+      response: { 200: boardCardSchema, ...apiErrorResponses },
+    })
     .get('/api/v1/requirements/:number/proposal', async ({ params, request, identity }) =>
-      services.forgejo.getProposal(issueNumber(params.number), await repositoryScope(request, identity!, services)), { params: numberParams })
+      Response.json(validateResponse(
+        requirementProposalSchema,
+        await services.forgejo.getProposal(
+          issueNumber(params.number),
+          await repositoryScope(request, identity!, services),
+        ),
+      )), {
+        params: issueNumberParamSchema,
+        query: requestContextQuerySchema,
+        response: { 200: requirementProposalSchema, ...apiErrorResponses },
+      })
     .put('/api/v1/requirements/:number/proposal', async ({ params, body, request, identity }) => {
       const denied = requireCapability(identity!, services, 'requirementsPropose', 'business persona required');
       if (denied) return denied;
-      try { return await services.forgejo.propose(issueNumber(params.number), actor(identity!), body, undefined, await repositoryScope(request, identity!, services)); }
+      try {
+        return Response.json(validateResponse(
+          requirementProposalSchema,
+          await services.forgejo.propose(
+            issueNumber(params.number),
+            actor(identity!),
+            body,
+            undefined,
+            await repositoryScope(request, identity!, services),
+          ),
+        ));
+      }
       catch (error) { return mapError(error, 500, (mapped) => recordError(request, mapped)); }
-    }, { params: numberParams, body: requirementSpecBody })
+    }, {
+      params: issueNumberParamSchema,
+      query: requestContextQuerySchema,
+      body: requirementSpecBodySchema,
+      response: { 200: requirementProposalSchema, ...apiErrorResponses },
+    })
     .post('/api/v1/requirements/:number/accept', async ({ params, body, request, identity }) => {
       const denied = requireCapability(identity!, services, 'requirementsAccept', 'business persona required');
       if (denied) return denied;
-      try { return await services.forgejo.accept(issueNumber(params.number), actor(identity!), body, await repositoryScope(request, identity!, services)); }
+      try {
+        return Response.json(validateResponse(
+          requirementAcceptanceSchema,
+          await services.forgejo.accept(
+            issueNumber(params.number),
+            actor(identity!),
+            body,
+            await repositoryScope(request, identity!, services),
+          ),
+        ));
+      }
       catch (error) { return mapError(error, 500, (mapped) => recordError(request, mapped)); }
-    }, { params: numberParams, body: requirementSpecBody })
+    }, {
+      params: issueNumberParamSchema,
+      query: requestContextQuerySchema,
+      body: requirementSpecBodySchema,
+      response: { 200: requirementAcceptanceSchema, ...apiErrorResponses },
+    })
     .get('/api/v1/requirements/:number/interview', async ({ params, request, identity }) => {
       const number = issueNumber(params.number);
       const scope = await repositoryScope(request, identity!, services);
@@ -170,20 +256,45 @@ export function requirementRoutes(
       }
       const agent = await services.coder.chatCapability(scope);
       if (interview.state.chatId) agent.chatUrl = services.coder.chatUrl(interview.state.chatId);
-      return { ...interview, agent };
-    }, { params: numberParams })
-    .post('/api/v1/requirements/:number/interview/start', ({ params, request, identity }) => {
+      return Response.json(validateResponse(interviewResponseSchema, { ...interview, agent }));
+    }, {
+      params: issueNumberParamSchema,
+      query: requestContextQuerySchema,
+      response: { 200: interviewResponseSchema, ...apiErrorResponses },
+    })
+    .post('/api/v1/requirements/:number/interview/start', async ({ params, request, identity }) => {
       const denied = requireCapability(identity!, services, 'requirementsInterview', 'business persona required');
-      return denied ?? startInterview(issueNumber(params.number), false, request, identity!, services);
-    }, { params: numberParams, body: emptyBody })
-    .post('/api/v1/requirements/:number/interview/retake', ({ params, request, identity }) => {
+      if (denied) return denied;
+      const result = await startInterview(issueNumber(params.number), false, request, identity!, services);
+      return validatedJsonResult(interviewStateResponseSchema, result);
+    }, {
+      params: issueNumberParamSchema,
+      query: requestContextQuerySchema,
+      body: emptyBodySchema,
+      response: { 200: interviewStateResponseSchema, ...apiErrorResponses },
+    })
+    .post('/api/v1/requirements/:number/interview/retake', async ({ params, request, identity }) => {
       const denied = requireCapability(identity!, services, 'requirementsInterview', 'business persona required');
-      return denied ?? startInterview(issueNumber(params.number), true, request, identity!, services);
-    }, { params: numberParams, body: emptyBody })
-    .post('/api/v1/requirements/:number/interview', ({ params, body, request, identity }) => {
+      if (denied) return denied;
+      const result = await startInterview(issueNumber(params.number), true, request, identity!, services);
+      return validatedJsonResult(interviewStateResponseSchema, result);
+    }, {
+      params: issueNumberParamSchema,
+      query: requestContextQuerySchema,
+      body: emptyBodySchema,
+      response: { 200: interviewStateResponseSchema, ...apiErrorResponses },
+    })
+    .post('/api/v1/requirements/:number/interview', async ({ params, body, request, identity }) => {
       const denied = requireCapability(identity!, services, 'requirementsInterview', 'business persona required');
-      return denied ?? answerInterview(issueNumber(params.number), body, request, identity!, services, interviewOperations);
-    }, { params: numberParams, body: answerBody })
+      if (denied) return denied;
+      const result = await answerInterview(issueNumber(params.number), body, request, identity!, services, interviewOperations);
+      return validatedJsonResult(interviewStateResponseSchema, result, 202);
+    }, {
+      params: issueNumberParamSchema,
+      query: requestContextQuerySchema,
+      body: answerInterviewBodySchema,
+      response: { 202: interviewStateResponseSchema, ...apiErrorResponses },
+    })
     .post('/api/v1/requirements/:number/interview/retry', async ({ params, request, identity }) => {
       const denied = requireCapability(identity!, services, 'requirementsInterview', 'business persona required');
       if (denied) return denied;
@@ -195,13 +306,30 @@ export function requirementRoutes(
       if (state.pendingOperation.failure.retryable === false) return errorResponse(409, state.pendingOperation.failure.message);
       state = await services.forgejo.setInterviewOperationFailure(number, state.pendingOperation.operationId, null, scope);
       interviewOperations.schedule(number, state, scope.repository);
-      return Response.json({ state }, { status: 202 });
-    }, { params: numberParams, body: emptyBody })
-    .post('/api/v1/requirements/:number/interview/sharpen', ({ params, body, request, identity }) => {
+      return Response.json(validateResponse(interviewStateResponseSchema, { state }), { status: 202 });
+    }, {
+      params: issueNumberParamSchema,
+      query: requestContextQuerySchema,
+      body: emptyBodySchema,
+      response: { 202: interviewStateResponseSchema, ...apiErrorResponses },
+    })
+    .post('/api/v1/requirements/:number/interview/sharpen', async ({ params, body, request, identity }) => {
       const denied = requireCapability(identity!, services, 'requirementsInterview', 'business persona required');
-      return denied ?? sharpenInterview(issueNumber(params.number), body.note, request, identity!, services);
-    }, { params: numberParams, body: sharpenBody })
-    .get('/api/v1/requirements/:number/events', async ({ params, request, identity }) => ({
-      events: await services.forgejo.events(issueNumber(params.number), await repositoryScope(request, identity!, services)),
-    }), { params: numberParams });
+      if (denied) return denied;
+      const result = await sharpenInterview(issueNumber(params.number), body.note, request, identity!, services);
+      return validatedJsonResult(interviewStateResponseSchema, result);
+    }, {
+      params: issueNumberParamSchema,
+      query: requestContextQuerySchema,
+      body: sharpenInterviewBodySchema,
+      response: { 200: interviewStateResponseSchema, ...apiErrorResponses },
+    })
+    .get('/api/v1/requirements/:number/events', async ({ params, request, identity }) => Response.json(validateResponse(
+      cardEventsResponseSchema,
+      { events: await services.forgejo.events(issueNumber(params.number), await repositoryScope(request, identity!, services)) },
+    )), {
+      params: issueNumberParamSchema,
+      query: requestContextQuerySchema,
+      response: { 200: cardEventsResponseSchema, ...apiErrorResponses },
+    });
 }

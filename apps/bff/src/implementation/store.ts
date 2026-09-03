@@ -6,8 +6,8 @@
 
 import { and, asc, desc, eq, inArray, isNull, lte, or, sql } from 'drizzle-orm';
 
-import type { Database } from '../db';
-import { delivery, deliveryCompletion, deliveryContributor, deliveryLifecycleEvent, deliveryVerification, operation, user } from '../db/schema';
+import type { Database } from '@agentic-software-factory/db';
+import { delivery, deliveryCompletion, deliveryContributor, deliveryLifecycleEvent, deliveryVerification, operation, user } from '@agentic-software-factory/db/schema';
 
 export type DeliveryRecord = typeof delivery.$inferSelect;
 export type DeliveryContributorRecord = typeof deliveryContributor.$inferSelect;

@@ -4,8 +4,12 @@
  * All software distributed under the RPL is provided strictly on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED, AND LICENSOR HEREBY DISCLAIMS ALL SUCH WARRANTIES, INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT, OR NON-INFRINGEMENT. See the RPL for specific language governing rights and limitations under the RPL.
  */
 
-import { sessionUserSchema } from '@agentic-software-factory/api-contracts/session';
+import { developmentToolsSchema } from '@agentic-software-factory/api-contracts/applications';
 import { consentContextSchema } from '@agentic-software-factory/api-contracts/auth';
+import { emptyBodySchema, requestContextQuerySchema, userIdParamSchema } from '@agentic-software-factory/api-contracts/common';
+import { apiErrorResponses } from '@agentic-software-factory/api-contracts/errors';
+import { sessionResponseSchema, sessionUserSchema } from '@agentic-software-factory/api-contracts/session';
+import { assignmentUsersResponseSchema, userDeprovisionResponseSchema } from '@agentic-software-factory/api-contracts/users';
 import { capabilitiesFor, personasFor } from '../auth/authorization';
 import {
   createAuthenticatedApi,
@@ -18,10 +22,12 @@ import {
   staticResponse,
   visibleTeams,
 } from './route-support';
+import { validateResponse } from './response-contracts';
 import type { ServerServices } from './types';
 import { Elysia } from 'elysia';
 
 const USER_DIRECTORY_LIMIT = 100;
+const teamQuerySchema = requestContextQuerySchema.pick({ team: true });
 
 function authHandler(services: ServerServices, request: Request): Promise<Response> | Response {
   return services.auth.handler?.(request) ?? errorResponse(404, 'not found');
@@ -53,7 +59,12 @@ export function diagnosticsApiRoutes(services: ServerServices) {
         ? undefined
         : teams.flatMap((team) => team.group ? [team.group] : []);
       const directory = await services.listUsers({ groups, limit: USER_DIRECTORY_LIMIT });
-      return { users: directory.users.map(({ email: _email, ...user }) => user) };
+      return Response.json(validateResponse(assignmentUsersResponseSchema, {
+        users: directory.users.map(({ email: _email, ...user }) => user),
+      }));
+    }, {
+      query: teamQuerySchema,
+      response: { 200: assignmentUsersResponseSchema, ...apiErrorResponses },
     })
     .get('/api/v1/session', ({ identity }) => {
       const name = identity!.name || identity!.username || identity!.email || '';
@@ -69,17 +80,48 @@ export function diagnosticsApiRoutes(services: ServerServices) {
         personas: personasFor(identity!, groups),
         capabilities: capabilitiesFor(identity!, groups),
       });
+    }, {
+      query: emptyBodySchema,
+      response: { 200: sessionResponseSchema, ...apiErrorResponses },
     })
     .get('/api/v1/development-tools', async ({ request, identity }) => {
       const denied = requireCapability(identity!, services, 'developerWorkspaceCreate', 'developer persona required');
       if (denied) return denied;
       const claimsReady = Boolean(identity!.emailVerified && identity!.email && identity!.username);
-      if (!claimsReady) return {
+      if (!claimsReady) return Response.json(validateResponse(developmentToolsSchema, {
         claimsReady: false, coderIdentity: false, forgejoConnected: false, forgejoUsername: null,
         connectUrl: null, ready: false,
-      };
+      }));
       const tools = await services.coder.developmentTools(requestScope(request, identity!, services));
-      return { claimsReady: true, ...tools, ready: tools.coderIdentity && tools.forgejoConnected };
+      return Response.json(validateResponse(developmentToolsSchema, {
+        claimsReady: true, ...tools, ready: tools.coderIdentity && tools.forgejoConnected,
+      }));
+    }, {
+      query: teamQuerySchema,
+      response: { 200: developmentToolsSchema, ...apiErrorResponses },
+    });
+}
+
+export function userAdministrationApiRoutes(services: ServerServices) {
+  return new Elysia({ name: 'user-administration-api-routes', normalize: false })
+    .post('/api/v1/users/:id/deprovision', async ({ request, params }) => {
+      const identity = await services.auth.authenticate(request);
+      if (!identity) return errorResponse(401, 'missing or invalid session');
+      if (!identity.groups?.includes(services.tenant.group)) return errorResponse(403, 'tenant access denied');
+      if (!isAdmin(identity, services)) return errorResponse(403, 'admin access required');
+      const id = params.id.trim();
+      if (!/^[A-Za-z0-9:_-]{1,255}$/.test(id)) return errorResponse(400, 'invalid user id');
+      if (id === identity.subject) return errorResponse(409, 'administrators cannot deprovision their own account');
+      if (!services.deprovisionUser) return errorResponse(503, 'user deprovisioning is not configured');
+      const result = await services.deprovisionUser(id);
+      return result
+        ? Response.json(validateResponse(userDeprovisionResponseSchema, result), { status: 202 })
+        : errorResponse(404, 'tenant user not found');
+    }, {
+      params: userIdParamSchema,
+      query: emptyBodySchema,
+      body: emptyBodySchema.nullable(),
+      response: { 202: userDeprovisionResponseSchema, ...apiErrorResponses },
     });
 }
 
@@ -153,18 +195,6 @@ export function diagnosticsAuthRoutes(services: ServerServices, startedAt: numbe
           staging: systems.value.staging,
         } } : services.systemsStatus ? { systems: { status: 'unavailable' } } : {}),
       };
-    })
-    .post('/api/v1/users/:id/deprovision', async ({ request, params }) => {
-      const identity = await services.auth.authenticate(request);
-      if (!identity) return errorResponse(401, 'missing or invalid session');
-      if (!identity.groups?.includes(services.tenant.group)) return errorResponse(403, 'tenant access denied');
-      if (!isAdmin(identity, services)) return errorResponse(403, 'admin access required');
-      const id = params.id.trim();
-      if (!/^[A-Za-z0-9:_-]{1,255}$/.test(id)) return errorResponse(400, 'invalid user id');
-      if (id === identity.subject) return errorResponse(409, 'administrators cannot deprovision their own account');
-      if (!services.deprovisionUser) return errorResponse(503, 'user deprovisioning is not configured');
-      const result = await services.deprovisionUser(id);
-      return result ? Response.json(result, { status: 202 }) : errorResponse(404, 'tenant user not found');
     })
     .get('/auth/config', () => services.auth.uiConfig)
     .get('/auth/consent-context', async ({ request }) => {

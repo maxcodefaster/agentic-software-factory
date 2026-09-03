@@ -7,7 +7,7 @@
 import { Component, computed, input, output } from '@angular/core';
 import { TranslocoPipe } from '@jsverse/transloco';
 
-import type { KanbanCard } from '@agentic-software-factory/api-contracts/kanban';
+import type { KanbanCard } from '../../core/api/kanban.types';
 import type { FactoryRequestContext } from '../../core/context/factory-context.store';
 import { Icon } from '../../shared/icon/icon';
 import { AssigneePicker } from './assignee-picker';

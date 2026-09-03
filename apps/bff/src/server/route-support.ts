@@ -6,17 +6,25 @@
 
 import { resolve, sep } from 'node:path';
 import { Elysia } from 'elysia';
-import { errorResponseSchema, type ErrorResponse } from '@agentic-software-factory/api-contracts/errors';
+import {
+  applicationErrorCodeForStatus,
+  errorResponseSchema,
+  type ErrorResponse,
+} from '@agentic-software-factory/api-contracts/errors';
 
 import type { SystemRegistration } from '../applications/catalog';
 import { capabilitiesFor, type FactoryCapabilities, type PersonaGroups } from '../auth/authorization';
-import { ApplicationError, type ApplicationErrorCode, type SanitizedErrorCause } from '../errors';
+import { ApplicationError, type SanitizedErrorCause } from '../errors';
 import { UpstreamHttpError, UpstreamTimeoutError } from '../integrations/fetch';
 import type { Identity, RequestScope, ServerServices } from './types';
 import { validateResponse } from './response-contracts';
 
-export function errorResponse(status: number, message: string, details?: Omit<ErrorResponse, 'error'>): Response {
-  return Response.json(validateResponse(errorResponseSchema, { error: message, ...details }), { status });
+export function errorResponse(status: number, message: string, details?: Omit<ErrorResponse, 'error' | 'code'>): Response {
+  return Response.json(validateResponse(errorResponseSchema, {
+    error: message,
+    code: applicationErrorCodeForStatus(status),
+    ...details,
+  }), { status });
 }
 
 export function actor(identity: Identity): string {
@@ -164,16 +172,6 @@ export function forgejoDestination(services: ServerServices, destination: string
   return login.toString();
 }
 
-function applicationErrorCode(status: number): ApplicationErrorCode {
-  if (status === 400 || status === 413) return 'bad_request';
-  if (status === 401) return 'authentication_required';
-  if (status === 403) return 'forbidden';
-  if (status === 404) return 'not_found';
-  if (status === 409) return 'conflict';
-  if (status === 422) return 'unprocessable_entity';
-  return 'internal_error';
-}
-
 function safeLogLabel(value: string, fallback: string): string {
   return /^[A-Za-z0-9 ._-]{1,64}$/.test(value) ? value : fallback;
 }
@@ -200,7 +198,7 @@ export function classifyError(error: unknown, fallbackStatus = 500): Application
   const message = safeStatus && error instanceof Error
     ? error.message
     : fallbackStatus === 502 ? 'upstream request failed' : 'internal server error';
-  const code = fallbackStatus === 502 && !safeStatus ? 'dependency_failure' : applicationErrorCode(status);
+  const code = fallbackStatus === 502 && !safeStatus ? 'dependency_failure' : applicationErrorCodeForStatus(status);
   const cause = !safeStatus ? { type: 'error' as const, name: error instanceof Error ? safeLogLabel(error.name, 'Error') : 'UnknownError' } : undefined;
   return new ApplicationError(code, status, message, cause, { cause: error });
 }
@@ -212,7 +210,7 @@ export function mapError(error: unknown, fallbackStatus = 500, record?: (error: 
     && typeof error === 'object' && error && 'issues' in error && Array.isArray(error.issues)
     ? { issues: error.issues }
     : undefined;
-  return errorResponse(mapped.status, mapped.message, { code: mapped.code, ...issues });
+  return errorResponse(mapped.status, mapped.message, issues);
 }
 
 export function implementationStartError(error: unknown): Response {

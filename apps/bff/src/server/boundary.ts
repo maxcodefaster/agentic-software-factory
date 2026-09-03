@@ -6,7 +6,7 @@
 
 import type { ServerServices } from './types';
 import { BlockList, isIP } from 'node:net';
-import { errorResponseSchema } from '@agentic-software-factory/api-contracts/errors';
+import { applicationErrorCodeForStatus, errorResponseSchema } from '@agentic-software-factory/api-contracts/errors';
 import type { ApplicationError, ApplicationErrorCode, SanitizedErrorCause } from '../errors';
 import { validateResponse } from './response-contracts';
 
@@ -78,7 +78,10 @@ const defaultRateLimits: RateLimitOptions = {
 };
 
 function boundaryError(message: string, status: number): Response {
-  return Response.json(validateResponse(errorResponseSchema, { error: message }), { status });
+  return Response.json(validateResponse(errorResponseSchema, {
+    error: message,
+    code: applicationErrorCodeForStatus(status),
+  }), { status });
 }
 
 // This process-local limiter is defense-in-depth, not a cluster-wide quota.

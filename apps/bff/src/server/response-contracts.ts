@@ -7,5 +7,5 @@
 import type { ZodType } from 'zod';
 
 export function validateResponse<T>(schema: ZodType<T>, value: unknown): T {
-  return process.env.NODE_ENV === 'production' ? value as T : schema.parse(value);
+  return schema.parse(value);
 }

@@ -57,8 +57,21 @@ ephemeral, single-job runners. Never place long-lived credentials or unrelated
 workloads on that runner group.
 
 Keep changes narrow. Add tests for observable behavior and update documentation
-when a contract changes. Do not commit secrets, generated build output,
-`.env.local`, or Terraform state.
+when a contract changes. Do not commit secrets, disposable build output,
+`.env.local`, or Terraform state. The checked-in OpenAPI document and Angular
+client are reviewed source artifacts; update them with `bun run api:generate`.
+
+Factory JSON APIs follow one contract path. Zod schemas in
+`packages/api-contracts` define the wire format, Elysia validates them directly,
+and OpenAPI plus the Angular `HttpClient` client are generated from the routes.
+Application code must not call `/api/v1` with raw `HttpClient` or `fetch`.
+Components and stores use the handwritten Angular API facades, which add runtime
+response parsing and feature mapping around the generated transport.
+
+`packages/db` owns Drizzle schema, connections, and migrations. Database types
+must not cross the HTTP boundary. Domain queries remain in their owning BFF
+module, which maps database rows to application results before a route projects
+them into a wire contract.
 
 ## Pull requests
 

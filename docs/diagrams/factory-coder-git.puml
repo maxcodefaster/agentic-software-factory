@@ -1,0 +1,46 @@
+@startuml
+' Unless explicitly acquired and licensed from Licensor under another license, the contents of this file are subject to the Reciprocal Public License ("RPL") Version 1.5, or subsequent versions as allowed by the RPL, and You may not copy or use this file in either source code or executable form, except in compliance with the terms and conditions of the RPL.
+'
+' All software distributed under the RPL is provided strictly on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED, AND LICENSOR HEREBY DISCLAIMS ALL SUCH WARRANTIES, INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT, OR NON-INFRINGEMENT. See the RPL for specific language governing rights and limitations under the RPL.
+
+title <size:18><b>From intent to durable source</b></size>
+
+top to bottom direction
+skinparam backgroundColor #F6F8FA
+skinparam shadowing false
+skinparam roundCorner 14
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+skinparam defaultTextAlignment center
+skinparam rectangleTextAlignment center
+skinparam ArrowColor #728B9A
+skinparam ArrowThickness 2
+skinparam actor {
+  BorderColor #17313D
+  BackgroundColor #DDF7EF
+  FontColor #17313D
+}
+skinparam rectangle {
+  BorderColor #315064
+  FontColor #EAF7F4
+  BackgroundColor #17313D
+}
+skinparam database {
+  BorderColor #2D4858
+  BackgroundColor #17232C
+  FontColor #EAF7F4
+}
+
+actor "<size:17><b>People</b></size>\n<size:12>Set intent · approve · review</size>" as people
+
+rectangle "<size:18><b>Agentic Software Factory</b></size>\n<size:12><color:#8FDCCB>Coordinates work and human decisions</color></size>\n\n<b>kanban</b>  ·  <b>approvals</b>\n<size:12>Requirements  ·  progress  ·  review  ·  complete</size>" as factory #0D4544
+
+rectangle "<size:18><b>Coder sandbox</b></size>\n<size:12><color:#8FDCCB>Runs agents in isolated workspaces</color></size>\n\n<b>ai agent</b>  ·  <b>ide</b>  ·  <b>previews</b>\n<size:12>Implement  ·  inspect  ·  edit  ·  verify</size>" as coder #17313D
+
+database "<size:18><b>Forgejo / Git</b></size>\n<size:12><color:#8FDCCB>Durable source and evidence</color></size>\n<size:12>issues · commits · pull requests · checks</size>" as git
+
+people -down-> factory
+factory -down-> coder
+coder -down-> git
+
+@enduml

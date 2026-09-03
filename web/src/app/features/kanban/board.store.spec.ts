@@ -10,9 +10,10 @@ import { TranslocoService } from '@jsverse/transloco';
 import { Observable, Subject, of, throwError } from 'rxjs';
 
 import type { ApplicationSummary, DeveloperWorkspace } from '@agentic-software-factory/api-contracts/applications';
-import type { KanbanBoardPage, KanbanCard, KanbanColumn, KanbanColumnId } from '@agentic-software-factory/api-contracts/kanban';
+import type { KanbanColumnId } from '@agentic-software-factory/api-contracts/kanban';
 import { ApplicationsClient } from '../../core/api/applications.client';
 import { KanbanClient } from '../../core/api/kanban.client';
+import type { KanbanBoardPage, KanbanCard, KanbanColumn } from '../../core/api/kanban.types';
 import { AuthService } from '../../core/auth/auth.service';
 import { SystemContextService } from '../../core/system/system-context.service';
 import { TeamContextService } from '../../core/team/team-context.service';

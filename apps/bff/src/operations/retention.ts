@@ -5,8 +5,8 @@
  */
 
 import { and, eq, lt, sql } from 'drizzle-orm';
-import type { Database } from '../db';
-import { deliveryCompletion, deliveryVerification, stagingReconciliationEvent, systemOnboardingEvent, workspaceStartup } from '../db/schema';
+import type { Database } from '@agentic-software-factory/db';
+import { deliveryCompletion, deliveryVerification, stagingReconciliationEvent, systemOnboardingEvent, workspaceStartup } from '@agentic-software-factory/db/schema';
 
 export class RetentionService {
   constructor(private readonly db: Database, private readonly tenantId: string) {}

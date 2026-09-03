@@ -10,7 +10,8 @@ import { HlmButton } from '@spartan-ng/helm/button';
 
 import type { ApplicationSummary } from '@agentic-software-factory/api-contracts/applications';
 import type { ImplementationRun } from '@agentic-software-factory/api-contracts/implementation';
-import type { ApplicationRef, KanbanCard } from '@agentic-software-factory/api-contracts/kanban';
+import type { ApplicationRef } from '@agentic-software-factory/api-contracts/kanban';
+import type { KanbanCard } from '../../core/api/kanban.types';
 import { Icon } from '../../shared/icon/icon';
 import { DeveloperModeStore } from './developer-mode.store';
 

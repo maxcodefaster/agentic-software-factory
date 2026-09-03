@@ -26,7 +26,7 @@ describe('errorResponseInterceptor', () => {
     expect(error).toMatchObject({ status: 404, error: { error: 'application not found', code: 'not_found' } });
   });
 
-  it('rejects malformed API errors', () => {
+  it('preserves HTTP status while normalizing malformed API errors', () => {
     let error: unknown;
     TestBed.inject(HttpClient).get('/api/v1/board').subscribe({ error: (failure) => { error = failure; } });
     TestBed.inject(HttpTestingController).expectOne('/api/v1/board').flush(
@@ -34,6 +34,9 @@ describe('errorResponseInterceptor', () => {
       { status: 404, statusText: 'Not Found' },
     );
 
-    expect(error).toMatchObject({ name: 'ZodError' });
+    expect(error).toMatchObject({
+      status: 404,
+      error: { error: 'malformed API error response', code: 'internal_error' },
+    });
   });
 });

@@ -7,11 +7,11 @@
 import { TestBed } from '@angular/core/testing';
 import { TranslocoTestingModule } from '@jsverse/transloco';
 import type { ImplementationRun } from '@agentic-software-factory/api-contracts/implementation';
-import type { KanbanCard } from '@agentic-software-factory/api-contracts/kanban';
 import { of, Subject, throwError } from 'rxjs';
 
 import { ApplicationsClient } from '../../core/api/applications.client';
 import { ImplementationClient } from '../../core/api/implementation.client';
+import type { KanbanCard } from '../../core/api/kanban.types';
 import { DeveloperMode } from './developer-mode';
 
 const run: ImplementationRun = {

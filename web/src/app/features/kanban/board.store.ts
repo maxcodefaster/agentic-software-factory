@@ -26,9 +26,10 @@ import {
 } from 'rxjs';
 
 import type { ApplicationSummary, DeveloperWorkspace } from '@agentic-software-factory/api-contracts/applications';
-import type { CreateCardInput, KanbanBoardPage, KanbanCard, KanbanColumn, KanbanColumnId, RequirementSpec } from '@agentic-software-factory/api-contracts/kanban';
+import type { KanbanColumnId, RequirementSpec } from '@agentic-software-factory/api-contracts/kanban';
 import { ApplicationsClient } from '../../core/api/applications.client';
 import { KanbanClient } from '../../core/api/kanban.client';
+import type { CreateCardInput, KanbanBoardPage, KanbanCard, KanbanColumn } from '../../core/api/kanban.types';
 import { AuthService } from '../../core/auth/auth.service';
 import type { FactoryRequestContext } from '../../core/context/factory-context.store';
 import { SystemContextService } from '../../core/system/system-context.service';

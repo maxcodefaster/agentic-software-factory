@@ -23,7 +23,7 @@ describe('ImplementationClient', () => {
     expect(http.expectOne('/api/v1/requirements/42/implementation-runs?team=operations').request.method).toBe('GET');
 
     client.start(context, 42, 'operations/orders').subscribe();
-    const start = http.expectOne('/api/v1/requirements/42/implementation-runs?team=operations&application=operations%2Forders');
+    const start = http.expectOne('/api/v1/requirements/42/implementation-runs?team=operations&application=operations/orders');
     expect(start.request.method).toBe('POST');
     expect(start.request.body).toEqual({ applicationId: 'operations/orders' });
 
@@ -53,7 +53,7 @@ describe('ImplementationClient', () => {
 
     client.start({ team: 'operations', application: null }, 42, 'operations/orders').subscribe({ error: (failure) => { error = failure; } });
     TestBed.inject(HttpTestingController)
-      .expectOne('/api/v1/requirements/42/implementation-runs?team=operations&application=operations%2Forders')
+      .expectOne('/api/v1/requirements/42/implementation-runs?team=operations&application=operations/orders')
       .flush({ id: 'run-1' });
 
     expect(error).toBeTruthy();

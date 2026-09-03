@@ -7,6 +7,11 @@ Agentic Software Factory takes a rough requirement to reviewed source. People
 approve requirements and delivery. Agents ask questions and implement changes
 inside Coder workspaces.
 
+![From intent to durable source: people guide the Factory, agents work in Coder, and Forgejo/Git preserves source and evidence](docs/images/factory-coder-git.svg)
+
+Factory coordinates the workflow. Forgejo/Git keeps durable work and evidence.
+Coder runs agents and development environments.
+
 > [!WARNING]
 > Version 0.1 is under active development, and the local stack is disposable.
 

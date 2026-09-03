@@ -35,6 +35,7 @@ COPY --from=bun /usr/local/bin/bun /usr/local/bin/bun
 COPY package.json bun.lock ./
 COPY apps/bff/package.json ./apps/bff/package.json
 COPY packages/api-contracts/package.json ./packages/api-contracts/package.json
+COPY packages/db/package.json ./packages/db/package.json
 COPY packages/design-system/package.json ./packages/design-system/package.json
 COPY web/package.json ./web/package.json
 RUN --mount=type=cache,target=/root/.bun/install/cache \
@@ -42,9 +43,10 @@ RUN --mount=type=cache,target=/root/.bun/install/cache \
 
 FROM dependencies AS bff-build
 COPY apps/bff/src ./apps/bff/src
-COPY apps/bff/tsconfig.json apps/bff/drizzle.config.ts ./apps/bff/
+COPY apps/bff/tsconfig.json ./apps/bff/
 COPY deploy/local/bootstrap-users.ts ./deploy/local/bootstrap-users.ts
 COPY packages/api-contracts ./packages/api-contracts
+COPY packages/db ./packages/db
 RUN bun run --filter=@agentic-software-factory/bff build
 
 FROM dependencies AS web-build
@@ -65,7 +67,7 @@ ENV NODE_ENV=production
 ENV WEB_ROOT=/app/web
 ENTRYPOINT []
 COPY --from=bff-build /src/apps/bff/dist ./dist
-COPY apps/bff/drizzle ./drizzle
+COPY packages/db/drizzle ./drizzle
 COPY apps/bff/package.json ./
 COPY LICENSE NOTICE THIRD_PARTY_NOTICES ./
 COPY --from=web-build /src/web/dist/portal/browser ./web

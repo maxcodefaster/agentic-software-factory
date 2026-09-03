@@ -12,9 +12,9 @@ import { readMigrationFiles } from 'drizzle-orm/migrator';
 
 import { createDatabase } from '.';
 import { authSchema } from './schema';
-import { assertDatabaseSchema, closeDatabase, migrateDatabase } from './migrate';
+import { assertDatabaseSchema, bundledMigrationsFolder, closeDatabase, migrateDatabase } from './migrate';
 
-const drizzle = resolve(import.meta.dir, '../../drizzle');
+const drizzle = bundledMigrationsFolder;
 const authTables = [
   'account',
   'jwks',

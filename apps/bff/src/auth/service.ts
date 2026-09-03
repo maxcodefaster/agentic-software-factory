@@ -5,7 +5,7 @@
  */
 
 import type { Identity } from '../server/types';
-import type { Database } from '../db';
+import type { Database } from '@agentic-software-factory/db';
 import type { createAuthCore } from './index';
 import type { FactoryAuthConfig } from './config';
 import { authUiConfigSchema, consentContextSchema, type AuthUiConfig, type ConsentContext } from '@agentic-software-factory/api-contracts/auth';

@@ -7,8 +7,8 @@
 import { and, asc, eq, gt, inArray, isNull, lt, or, sql } from 'drizzle-orm';
 import type { OnboardingPhase } from '@agentic-software-factory/api-contracts/applications';
 
-import type { Database } from '../db';
-import { systemOnboarding, systemOnboardingEvent, systemRegistration } from '../db/schema';
+import type { Database } from '@agentic-software-factory/db';
+import { systemOnboarding, systemOnboardingEvent, systemRegistration } from '@agentic-software-factory/db/schema';
 import type { CompatibilityIssue } from './system-contract';
 
 export type { OnboardingPhase };

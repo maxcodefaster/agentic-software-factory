@@ -7,8 +7,8 @@
 import { hashPassword } from 'better-auth/crypto';
 import { eq } from 'drizzle-orm';
 
-import type { Database } from '../db';
-import { account, user } from '../db/schema';
+import type { Database } from '@agentic-software-factory/db';
+import { account, user } from '@agentic-software-factory/db/schema';
 import type { BootstrapUserConfig } from './config';
 import { sha256Base64Url } from './security';
 

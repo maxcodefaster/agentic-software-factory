@@ -17,7 +17,8 @@ import { TranslocoPipe } from '@jsverse/transloco';
 import { HlmButton } from '@spartan-ng/helm/button';
 
 import type { ApplicationSummary } from '@agentic-software-factory/api-contracts/applications';
-import type { CreateCardInput, KanbanCard, KanbanColumnId, RequirementSpec } from '@agentic-software-factory/api-contracts/kanban';
+import type { KanbanColumnId, RequirementSpec } from '@agentic-software-factory/api-contracts/kanban';
+import type { CreateCardInput, KanbanCard } from '../../core/api/kanban.types';
 import { AuthService } from '../../core/auth/auth.service';
 import { SystemContextService } from '../../core/system/system-context.service';
 import { TeamContextService } from '../../core/team/team-context.service';

@@ -164,7 +164,7 @@ function insertionOffset(path: string, content: string, style: CommentStyle): nu
 function exclusionFor(path: string): string {
   const name = basename(path);
   const extension = extname(path).toLowerCase();
-  if (generatedFiles.has(path)) return "generated files";
+  if (generatedFiles.has(path) || path.startsWith("web/src/app/generated/api/")) return "generated files";
   if (lockNames.has(name) || name === ".terraform.lock.hcl") return "third-party lockfiles";
   if (imageExtensions.has(extension)) return "images and binary assets";
   if (extension === ".md" || extension === ".mdx") return "Markdown documentation";
@@ -241,7 +241,7 @@ for (const path of await repositoryFiles()) {
     continue;
   }
   const excluded = exclusionFor(path);
-  if (generatedFiles.has(path) || lockNames.has(basename(path)) || basename(path) === ".terraform.lock.hcl") {
+  if (generatedFiles.has(path) || path.startsWith("web/src/app/generated/api/") || lockNames.has(basename(path)) || basename(path) === ".terraform.lock.hcl") {
     exclusions.set(excluded, (exclusions.get(excluded) ?? 0) + 1);
     continue;
   }

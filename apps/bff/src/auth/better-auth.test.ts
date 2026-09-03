@@ -6,7 +6,7 @@
 
 import { afterEach, describe, expect, mock, spyOn, test } from 'bun:test';
 
-import type { Database } from '../db';
+import type { Database } from '@agentic-software-factory/db';
 import { createFactoryAuth, ENTRA_SCOPES, entraRedirectUri, groupsForEntraRoles } from './better-auth';
 import type { FactoryAuthConfig } from './config';
 

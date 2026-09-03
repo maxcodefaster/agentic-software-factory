@@ -7,8 +7,8 @@
 import { createAuthCore } from './auth';
 import { FactoryAuthService } from './auth/service';
 import { UserDeprovisionService, UserDeprovisionStore } from './auth/deprovision';
-import { createDatabase } from './db';
-import { assertDatabaseSchema, closeDatabase } from './db/migrate';
+import { createDatabase } from '@agentic-software-factory/db';
+import { assertDatabaseSchema, bundledMigrationsFolder, closeDatabase } from '@agentic-software-factory/db/migrate';
 import { loadRuntimeConfig } from './env';
 import { ForgejoClient } from './forgejo/client';
 import { forgejoTeamAccess, forgejoTeamName } from './forgejo/access';
@@ -28,8 +28,7 @@ import { WorkspaceStartupMetrics } from './applications/startup-metrics';
 import { RetentionService } from './operations/retention';
 import { OtlpTraceExporter } from './operations/tracing';
 import { and, arrayContains, arrayOverlaps, asc, eq, sql } from 'drizzle-orm';
-import { resolve } from 'node:path';
-import { coderUserBinding, user } from './db/schema';
+import { coderUserBinding, user } from '@agentic-software-factory/db/schema';
 import { WorkerHost } from './worker-host';
 
 const config = loadRuntimeConfig();
@@ -60,7 +59,7 @@ process.once('SIGINT', () => { void shutdown('SIGINT'); });
 process.once('SIGTERM', () => { void shutdown('SIGTERM'); });
 
 try {
-  await assertDatabaseSchema(database.db, resolve(import.meta.dir, '../drizzle'));
+  await assertDatabaseSchema(database.db, bundledMigrationsFolder);
   const authCore = await createAuthCore(database.db, config.auth);
   const auth = new FactoryAuthService(authCore, config.auth, database.db);
   const forgejo = new ForgejoClient(

@@ -4,7 +4,6 @@
  * All software distributed under the RPL is provided strictly on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED, AND LICENSOR HEREBY DISCLAIMS ALL SUCH WARRANTIES, INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT, OR NON-INFRINGEMENT. See the RPL for specific language governing rights and limitations under the RPL.
  */
 
-import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { filter, map, switchMap, take, timer, timeout, type Observable } from 'rxjs';
 
@@ -26,59 +25,65 @@ import {
   type RemediationResponse,
 } from '@agentic-software-factory/api-contracts/applications';
 import type { FactoryRequestContext } from '../context/factory-context.store';
+import { AgenticSoftwareFactoryAPIService } from '../../generated/api/factory-api';
 
 @Injectable({ providedIn: 'root' })
 export class ApplicationsClient {
-  private readonly http = inject(HttpClient);
+  private readonly api = inject(AgenticSoftwareFactoryAPIService);
 
   list(context: FactoryRequestContext): Observable<ApplicationsResponse> {
-    return this.http.get<unknown>(`/api/v1/applications?team=${encodeURIComponent(context.team)}`).pipe(
+    return this.api.getApiV1Applications<unknown>({ team: context.team }).pipe(
       map((response) => applicationsResponseSchema.parse(response)),
     );
   }
 
   listOnboardingRepositories(): Observable<OnboardingRepositoriesResponse> {
-    return this.http.get<unknown>('/api/v1/applications/onboarding/repositories').pipe(
+    return this.api.getApiV1ApplicationsOnboardingRepositories<unknown>().pipe(
       map((response) => onboardingRepositoriesResponseSchema.parse(response)),
     );
   }
 
   listOnboardingAttempts(): Observable<OnboardingAttemptsResponse> {
-    return this.http.get<unknown>('/api/v1/applications/onboarding/attempts').pipe(
+    return this.api.getApiV1ApplicationsOnboardingAttempts<unknown>().pipe(
       map((response) => onboardingAttemptsResponseSchema.parse(response)),
     );
   }
 
   register(input: RegisterApplicationRequest): Observable<OnboardedApplication> {
-    return this.http.post<unknown>('/api/v1/applications/onboarding/register', input).pipe(
+    return this.api.postApiV1ApplicationsOnboardingRegister<unknown>(input).pipe(
       map((response) => onboardedApplicationSchema.parse(response)),
     );
   }
 
   developmentTools(): Observable<DevelopmentTools> {
-    return this.http.get<unknown>('/api/v1/development-tools').pipe(
+    return this.api.getApiV1DevelopmentTools<unknown>().pipe(
       map((response) => developmentToolsSchema.parse(response)),
     );
   }
 
   createRemediation(systemId: string): Observable<RemediationResponse> {
-    return this.http.post<unknown>(`/api/v1/applications/${encodeURIComponent(systemId)}/remediation`, {}).pipe(
+    return this.api.postApiV1ApplicationsByIdRemediation<unknown>(encodeURIComponent(systemId), {}).pipe(
       map((response) => remediationResponseSchema.parse(response)),
     );
   }
 
   retryStaging(systemId: string, team: string): Observable<void> {
-    return this.http.post<void>(`/api/v1/applications/${encodeURIComponent(systemId)}/staging/retry?team=${encodeURIComponent(team)}`, {});
+    return this.api.postApiV1ApplicationsByIdStagingRetry<void>(encodeURIComponent(systemId), {}, { team });
   }
 
   createWorkspace(context: FactoryRequestContext, id: string): Observable<DeveloperWorkspace> {
     const requestContext = { ...context };
-    return this.http.post<unknown>(`/api/v1/applications/${encodeURIComponent(id)}/workspace?team=${encodeURIComponent(requestContext.team)}`, {}).pipe(
+    const encodedId = encodeURIComponent(id);
+    return this.api.postApiV1ApplicationsByIdWorkspace<unknown>(encodedId, {}, { team: requestContext.team }).pipe(
       map((response) => developerWorkspaceSchema.parse(response)),
       switchMap((workspace) => workspace.ideUrl
         ? [workspace]
         : timer(0, 2_000).pipe(
-          switchMap(() => this.http.get<unknown>(`/api/v1/applications/${encodeURIComponent(id)}/workspaces/${encodeURIComponent(workspace.workspaceId)}?team=${encodeURIComponent(requestContext.team)}`)),
+          switchMap(() => this.api.getApiV1ApplicationsByIdWorkspacesByWorkspaceId<unknown>(
+            encodedId,
+            encodeURIComponent(workspace.workspaceId),
+            { team: requestContext.team },
+          )),
           map((response) => developerWorkspaceSchema.parse(response)),
           filter((current) => Boolean(current.ideUrl)),
           take(1),

@@ -6,8 +6,8 @@
 
 import { and, asc, eq, ne } from 'drizzle-orm';
 
-import type { Database } from '../db';
-import { systemOnboarding, systemRegistration } from '../db/schema';
+import type { Database } from '@agentic-software-factory/db';
+import { systemOnboarding, systemRegistration } from '@agentic-software-factory/db/schema';
 import type { ApplicationDefinition, SystemRegistration } from './catalog';
 
 export interface PersistedRegistrySystem {

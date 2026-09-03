@@ -6,7 +6,6 @@
 
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { eq } from 'drizzle-orm';
-import { resolve } from 'node:path';
 
 import { createAuthCore } from '.';
 import { bootstrapLocalUser } from './bootstrap-user';
@@ -14,8 +13,8 @@ import { FactoryAuthService } from './service';
 import { UserDeprovisionStore } from './deprovision';
 import type { FactoryAuthConfig } from './config';
 import { pkceChallenge, sha256Base64Url } from './security';
-import { createDatabase } from '../db';
-import { closeDatabase, migrateDatabase } from '../db/migrate';
+import { createDatabase } from '@agentic-software-factory/db';
+import { bundledMigrationsFolder, closeDatabase, migrateDatabase } from '@agentic-software-factory/db/migrate';
 import {
   account,
   coderUserBinding,
@@ -28,7 +27,7 @@ import {
   systemRegistration,
   user,
   verification,
-} from '../db/schema';
+} from '@agentic-software-factory/db/schema';
 
 const issuer = 'http://127.0.0.1:48080';
 const containerName = `factory-auth-test-${process.pid}-${crypto.randomUUID().slice(0, 8)}`;
@@ -152,7 +151,7 @@ beforeAll(async () => {
   }
 
   database = createDatabase(databaseUrl);
-  await migrateDatabase(database.db, resolve(import.meta.dir, '../../drizzle'));
+  await migrateDatabase(database.db, bundledMigrationsFolder);
   config = {
     mode: 'local',
     issuer,

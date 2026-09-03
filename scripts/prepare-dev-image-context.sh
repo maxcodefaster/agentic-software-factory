@@ -37,7 +37,7 @@ paths=$(mktemp "${TMPDIR:-/tmp}/factory-image-paths.XXXXXX")
 trap 'rm -f "$paths"' EXIT HUP INT TERM
 git -C "$source" ls-files -co --exclude-standard -- \
   .dockerignore package.json bun.lock LICENSE NOTICE THIRD_PARTY_NOTICES \
-  apps/bff deploy/local/bootstrap-users.ts packages/api-contracts packages/design-system web |
+  apps/bff deploy/local/bootstrap-users.ts packages/api-contracts packages/db packages/design-system web |
   LC_ALL=C sort -u >"$paths"
 
 suspicious=$(grep -Ei '(^|/)(\.env($|\.)|\.npmrc$|\.netrc$|\.pypirc$|\.git-credentials$|auth\.json$|credentials(\.json)?$|application_default_credentials\.json$|hosts\.yml$|id_(rsa|dsa|ecdsa|ed25519)(\.pub)?$|.*(secret|credential|private[-_.]?key).*|token(\.[^/]*)?)$|(^|/)(\.docker|\.kube)/config(\.json)?$|(^|/)\.aws/credentials$' "$paths" || true)
@@ -58,14 +58,14 @@ done <"$paths" | tar -C "$source" -T - -cf - | tar -C "$destination" -xf -
   if git -C "$source" rev-parse --verify HEAD >/dev/null 2>&1; then
     git -C "$source" ls-tree -r HEAD -- \
       .dockerignore package.json bun.lock LICENSE NOTICE THIRD_PARTY_NOTICES \
-      apps/bff deploy/local/bootstrap-users.ts packages/api-contracts packages/design-system web
+      apps/bff deploy/local/bootstrap-users.ts packages/api-contracts packages/db packages/design-system web
   else
     printf 'unborn\n'
   fi
   printf 'index\n'
   git -C "$source" ls-files -s -- \
     .dockerignore package.json bun.lock LICENSE NOTICE THIRD_PARTY_NOTICES \
-    apps/bff deploy/local/bootstrap-users.ts packages/api-contracts packages/design-system web
+    apps/bff deploy/local/bootstrap-users.ts packages/api-contracts packages/db packages/design-system web
   printf 'worktree\n'
   while IFS= read -r path; do
     case "$path" in

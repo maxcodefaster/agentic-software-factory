@@ -9,6 +9,7 @@
     "apps/bff",
     "web",
     "packages/api-contracts",
+    "packages/db",
     "packages/design-system"
   ],
   "overrides": {
@@ -18,6 +19,10 @@
     "vite": "8.2.2"
   },
   "scripts": {
+    "api:spec": "bun apps/bff/scripts/api-spec.ts",
+    "api:client": "bun x orval --config ./orval.config.ts",
+    "api:generate": "bun run api:spec && bun run api:client",
+    "api:check": "bun scripts/check-api-artifacts.ts",
     "factory": "bun scripts/factory.ts",
     "factory:test": "bun test scripts/factory.test.ts scripts/factory/reconcile-coder.test.ts",
     "bff:build": "bun run --filter=@agentic-software-factory/bff build",
@@ -25,13 +30,19 @@
     "bff:typecheck": "bun run --filter=@agentic-software-factory/bff typecheck",
     "coder:pins:check": "bun scripts/check-coder-pins.ts",
     "license:check": "bun scripts/license-check.ts",
+    "db:test": "bun run --filter=@agentic-software-factory/db test",
+    "db:typecheck": "bun run --filter=@agentic-software-factory/db typecheck",
     "web:dev": "bun run --filter=@agentic-software-factory/web dev",
     "web:build": "bun run --filter=@agentic-software-factory/web build",
     "web:test": "bun run --filter=@agentic-software-factory/web test",
     "web:typecheck": "bun run --filter=@agentic-software-factory/web typecheck"
   },
+  "dependencies": {
+    "@agentic-software-factory/db": "workspace:*"
+  },
   "devDependencies": {
     "@axe-core/playwright": "4.10.2",
+    "orval": "8.27.0",
     "playwright": "1.62.1"
   }
 }

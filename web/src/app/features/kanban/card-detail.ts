@@ -9,7 +9,8 @@ import { TranslocoPipe, TranslocoService } from '@jsverse/transloco';
 import { HlmButton } from '@spartan-ng/helm/button';
 
 import type { ApplicationSummary } from '@agentic-software-factory/api-contracts/applications';
-import type { ApplicationRef, KanbanCard, KanbanColumnId, RequirementSpec } from '@agentic-software-factory/api-contracts/kanban';
+import type { ApplicationRef, KanbanColumnId, RequirementSpec } from '@agentic-software-factory/api-contracts/kanban';
+import type { KanbanCard } from '../../core/api/kanban.types';
 import type { FactoryRequestContext } from '../../core/context/factory-context.store';
 import { Icon } from '../../shared/icon/icon';
 import { Overlay } from '../../shared/overlay/overlay';

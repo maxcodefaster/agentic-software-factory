@@ -5,6 +5,9 @@
  */
 
 import { z } from 'zod';
+import { requestContextQuerySchema } from './common';
+
+export const governanceQuerySchema = requestContextQuerySchema.pick({ team: true }).strict();
 
 export const workspaceKindSchema = z.enum(['developer', 'verification']);
 export type WorkspaceKind = z.infer<typeof workspaceKindSchema>;
@@ -20,7 +23,7 @@ export const monitoringWorkspaceSchema = z.object({
   outdated: z.boolean(),
   lastUsedAt: z.string(),
   kind: workspaceKindSchema,
-});
+}).strict();
 export type MonitoringWorkspace = z.infer<typeof monitoringWorkspaceSchema>;
 
 export const monitoringResponseSchema = z.object({
@@ -29,7 +32,7 @@ export const monitoringResponseSchema = z.object({
     available: z.boolean(),
     count: z.number().int().nonnegative(),
     workspaces: z.array(monitoringWorkspaceSchema),
-  }),
+  }).strict(),
   capabilities: z.record(z.string(), z.string()),
-});
+}).strict();
 export type MonitoringResponse = z.infer<typeof monitoringResponseSchema>;

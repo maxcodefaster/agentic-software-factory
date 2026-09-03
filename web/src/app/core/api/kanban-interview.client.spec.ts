@@ -17,7 +17,7 @@ describe('KanbanInterviewClient', () => {
   it('scopes every interview request and places actions before the query string', () => {
     const client = TestBed.inject(KanbanInterviewClient);
     const http = TestBed.inject(HttpTestingController);
-    const scoped = '?team=operations&application=operations%2Forders';
+    const scoped = '?team=operations&application=operations/orders';
     const context = { team: 'operations', application: 'operations/orders' };
     const answer = { questionId: 'question-1', value: 'answer' } as never;
 
@@ -58,8 +58,8 @@ describe('KanbanInterviewClient', () => {
     context.team = 'factory';
     context.application = 'factory/billing';
 
-    http.expectNone('/api/v1/requirements/42/interview?team=factory&application=factory%2Fbilling');
-    http.expectOne('/api/v1/requirements/42/interview?team=operations&application=operations%2Forders').flush({});
+    http.expectNone('/api/v1/requirements/42/interview?team=factory&application=factory/billing');
+    http.expectOne('/api/v1/requirements/42/interview?team=operations&application=operations/orders').flush({});
   });
 
   it('rejects malformed interview read and command responses', () => {
@@ -69,10 +69,10 @@ describe('KanbanInterviewClient', () => {
     const errors: unknown[] = [];
 
     client.get(context, 'operations/orders#42').subscribe({ error: (error) => errors.push(error) });
-    http.expectOne('/api/v1/requirements/42/interview?team=operations&application=operations%2Forders').flush({ state: {} });
+    http.expectOne('/api/v1/requirements/42/interview?team=operations&application=operations/orders').flush({ state: {} });
 
     client.start(context, 'operations/orders#42').subscribe({ error: (error) => errors.push(error) });
-    http.expectOne('/api/v1/requirements/42/interview/start?team=operations&application=operations%2Forders').flush({ state: {} });
+    http.expectOne('/api/v1/requirements/42/interview/start?team=operations&application=operations/orders').flush({ state: {} });
 
     expect(errors).toHaveLength(2);
   });

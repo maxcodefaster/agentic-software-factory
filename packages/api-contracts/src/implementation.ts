@@ -6,6 +6,16 @@
 
 import { z } from 'zod';
 import { workspaceAppSchema } from './applications';
+import { identifierSchema } from './common';
+
+export const startImplementationBodySchema = z.object({
+  applicationId: identifierSchema,
+}).strict();
+
+export const reviewImplementationBodySchema = z.object({
+  decision: z.enum(['approve', 'request-changes']),
+  body: z.string().max(50_000),
+}).strict();
 
 export const implementationPhaseSchema = z.enum([
   'unplanned',
@@ -76,6 +86,8 @@ export type ImplementationPhase = z.infer<typeof implementationPhaseSchema>;
 export type ImplementationCheck = z.infer<typeof implementationCheckSchema>;
 export type ImplementationReview = z.infer<typeof implementationReviewSchema>;
 export type ImplementationRun = z.infer<typeof implementationRunSchema>;
+export type StartImplementationBody = z.infer<typeof startImplementationBodySchema>;
+export type ReviewImplementationBody = z.infer<typeof reviewImplementationBodySchema>;
 
 export const implementationRunsResponseSchema = z.object({ runs: z.array(implementationRunSchema) }).strict();
 export type ImplementationRunsResponse = z.infer<typeof implementationRunsResponseSchema>;

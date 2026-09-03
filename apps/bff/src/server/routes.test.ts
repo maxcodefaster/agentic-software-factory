@@ -87,8 +87,20 @@ const requirementSpec = {
   moscow: { must: ['Onboarding'], should: [], could: [] }, openQuestions: [], nonGoals: [],
 };
 
+const implementationRun = {
+  id: 'run-1', requirementNumber: 2, applicationId: application.id, applicationName: application.name,
+  acceptedDigest: 'sha256:accepted', repository: application.cloneUrl, repositoryUrl: application.repositoryUrl,
+  branch: 'factory/run-1', pullNumber: 1, pullUrl: `${application.repositoryUrl}/pulls/1`, headSha: 'b'.repeat(40), mergedSha: null,
+  phase: 'awaiting-review' as const, agentStatus: 'completed' as const, agentError: null, agentStartedHeadSha: 'a'.repeat(40),
+  checks: [], reviews: [], blockers: [], nextAction: 'Review the implementation',
+  workspaceUrl: null, workspaceId: null, workspaceStatus: null, agentUrl: null, ideUrl: null,
+  developmentApps: [], verificationApps: [], isContributor: false, canContinueBranch: false,
+  createdAt: '2026-08-20T00:00:00Z', updatedAt: '2026-08-20T01:00:00Z', completedAt: null,
+};
+
 function services(overrides: Partial<ServerServices> = {}) {
   const transition = mock(async (number: number, status: string) => ({
+    ...board.columns.requirements[0]!,
     number,
     title: 'Moved',
     body: 'Body',
@@ -99,13 +111,16 @@ function services(overrides: Partial<ServerServices> = {}) {
     ready: mock(async () => undefined),
     board: mock(async () => board),
     createRequirement: mock(async ({ title, body }) => ({
+      ...board.columns.requirements[0]!,
       number: 3,
       title,
       body,
+      url: 'https://forgejo.example/factory/requirements/issues/3',
       status: 'ideation',
       updatedAt: '2026-08-20T01:00:00Z',
     })),
     updateRequirement: mock(async (number, input) => ({
+      ...board.columns.requirements[0]!,
       number,
       title: input.title ?? 'Requirement',
       body: input.body ?? 'Body',
@@ -114,9 +129,16 @@ function services(overrides: Partial<ServerServices> = {}) {
     })),
     closeRequirement: mock(async () => undefined),
     transition,
-    accept: mock(async () => ({ requirementId: 'req_1' })),
-    getProposal: mock(async () => ({ specification: {} })),
-    propose: mock(async () => ({ proposedBy: 'coder#owner-1' })),
+    accept: mock(async () => ({
+      requirementId: 'req_1', revision: 'revision-1', digest: 'digest-1',
+      path: 'requirements/req_1.yaml', commitSha: 'a'.repeat(40),
+    })),
+    getProposal: mock(async () => ({
+      specification: requirementSpec, proposedBy: 'coder#owner-1', proposedAt: '2026-08-20T01:00:00Z',
+    })),
+    propose: mock(async (_number, _actor, specification) => ({
+      specification, proposedBy: 'coder#owner-1', proposedAt: '2026-08-20T01:00:00Z',
+    })),
     getInterview: mock(async () => ({
       state: emptyState,
       spec: null,
@@ -417,7 +439,7 @@ describe('Agentic Software Factory Elysia server', () => {
 
     const blocked = await mutation();
     expect(blocked.status).toBe(503);
-    expect(await blocked.json()).toEqual({ error: 'external services are not ready' });
+    expect(await blocked.json()).toEqual({ error: 'external services are not ready', code: 'service_unavailable' });
     expect(fixture.forgejo.createRequirement).not.toHaveBeenCalled();
     expect((await app.handle(request('/api/v1/session', { headers: { authorization: 'Bearer valid' } }))).status).toBe(200);
     expect((await app.handle(request('/auth/logout', { method: 'POST' }))).status).toBe(200);
@@ -547,6 +569,17 @@ describe('Agentic Software Factory Elysia server', () => {
     expect(listUsers).toHaveBeenCalledWith({ groups: undefined, limit: 100 });
   });
 
+  test('rejects a malformed user directory response before serializing it', async () => {
+    const response = await createServer(services({
+      listUsers: mock(async () => ({ users: [{
+        id: 'alice-id', username: 'alice', displayName: 'Alice Example', email: 'alice@example.test', initials: 7,
+      }] })) as never,
+    }).value).handle(request('/api/v1/users', { headers: { authorization: 'Bearer valid' } }));
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({ error: 'internal server error', code: 'internal_error' });
+  });
+
   test('denies the user directory only to tenant readers', async () => {
     const base = services();
     const listUsers = mock(async () => ({ users: [{
@@ -647,6 +680,29 @@ describe('Agentic Software Factory Elysia server', () => {
     expect((await app.handle(request('/api/v1/users/%20/deprovision', { method: 'POST', headers }))).status).toBe(400);
     expect((await app.handle(request('/api/v1/users/foreign-id/deprovision', { method: 'POST', headers }))).status).toBe(404);
     expect(deprovisionUser).toHaveBeenCalledTimes(1);
+  });
+
+  test('validates diagnostics API query, params, and deprovision body contracts', async () => {
+    const base = services();
+    const deprovisionUser = mock(async () => null);
+    const app = createServer(services({
+      deprovisionUser,
+      auth: { ...base.auth, authenticate: mock(async () => ({ ...identity, groups: [...identity.groups!, 'tenant-factory-admin'] })) },
+    }).value);
+    const headers = { authorization: 'Bearer valid' };
+
+    expect(await (await app.handle(request('/api/v1/development-tools', { headers }))).json()).toEqual({
+      claimsReady: false, coderIdentity: false, forgejoConnected: false,
+      forgejoUsername: null, connectUrl: null, ready: false,
+    });
+    expect((await app.handle(request('/api/v1/session?unexpected=true', { headers }))).status).toBe(400);
+    expect((await app.handle(request('/api/v1/users?application=hidden', { headers }))).status).toBe(400);
+    expect((await app.handle(request('/api/v1/development-tools?application=hidden', { headers }))).status).toBe(400);
+    expect((await app.handle(request('/api/v1/users/%20/deprovision', { method: 'POST', headers }))).status).toBe(400);
+    expect((await app.handle(request('/api/v1/users/bob-id/deprovision', {
+      method: 'POST', headers: { ...headers, 'content-type': 'application/json' }, body: JSON.stringify({ force: true }),
+    }))).status).toBe(400);
+    expect(deprovisionUser).not.toHaveBeenCalled();
   });
 
   test('allows developers and admins to onboard Systems while denying business users', async () => {
@@ -769,6 +825,22 @@ describe('Agentic Software Factory Elysia server', () => {
     expect(body.workspaces.count).toBe(2);
   });
 
+  test('reports malformed workspace monitoring as a server response failure', async () => {
+    const malformed = {
+      id: 'workspace-1', name: 'developer-app', owner: 'alice', template: 'Factory', status: 'running', transition: 'start',
+      healthy: true, outdated: false, parameters: { workspace_kind: 'developer', workspace_namespace: 'factory-workspaces' }, apps: [],
+    } as unknown as import('./types').Workspace;
+    const fixture = services({
+      coder: { ...services().value.coder, summary: mock(async () => ({ count: 1, workspaces: [malformed], available: true })) },
+    });
+
+    const response = await createServer(fixture.value).handle(request('/api/v1/governance', {
+      headers: { authorization: 'Bearer valid' },
+    }));
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({ error: 'internal server error', code: 'internal_error' });
+  });
+
   test('creates developer workspaces through Factory', async () => {
     const ensureDeveloperWorkspace = mock(async () => ({
       id: 'workspace-1', name: 'developer-app', template: 'Agentic Software Factory', status: 'running', healthy: true,
@@ -803,6 +875,28 @@ describe('Agentic Software Factory Elysia server', () => {
     expect(ideHandoff.pathname).toBe('/api/v2/users/oidc/callback');
     expect(ideHandoff.searchParams.get('redirect')).toContain('/api/v2/applications/auth-redirect');
     expect(new URL(body.servicesUrl as string).searchParams.get('redirect')).toContain('app=process-compose');
+  });
+
+  test('rejects malformed developer workspace projections instead of sending them', async () => {
+    const base = services();
+    const fixture = services({
+      coder: {
+        ...base.coder,
+        developerWorkspaceById: mock(async () => ({
+          id: 'workspace-1', name: 'developer-app', template: 'Agentic Software Factory', status: 'running', healthy: true,
+          lastUsedAt: '2026-08-20T01:00:00Z', url: 'https://coder.example/workspace',
+          apps: [{ slug: 'preview', displayName: 'Preview', url: 'https://preview.example', health: 'broken' }],
+          parameters: { workspace_kind: 'developer' },
+        }) as never),
+      },
+    });
+
+    const response = await createServer(fixture.value).handle(request(`/api/v1/applications/${encodeURIComponent(application.id)}/workspaces/workspace-1?team=factory`, {
+      headers: { authorization: 'Bearer valid' },
+    }));
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({ error: 'internal server error', code: 'internal_error' });
   });
 
   test('does not open an application workspace through another team scope', async () => {
@@ -856,7 +950,7 @@ describe('Agentic Software Factory Elysia server', () => {
       method: 'DELETE', headers: { authorization: 'Bearer valid' },
     }));
     expect(response.status).toBe(409);
-    expect(await response.json()).toEqual({ error: 'requirements cannot be deleted after implementation starts' });
+    expect(await response.json()).toEqual({ error: 'requirements cannot be deleted after implementation starts', code: 'conflict' });
     expect(fixture.forgejo.closeRequirement).not.toHaveBeenCalled();
   });
 
@@ -875,7 +969,7 @@ describe('Agentic Software Factory Elysia server', () => {
     }));
 
     expect(response.status).toBe(409);
-    expect(await response.json()).toEqual({ error: 'accepted requirements cannot be edited' });
+    expect(await response.json()).toEqual({ error: 'accepted requirements cannot be edited', code: 'conflict' });
     expect(updateRequirement).not.toHaveBeenCalled();
   });
 
@@ -899,7 +993,7 @@ describe('Agentic Software Factory Elysia server', () => {
       method: 'POST', headers: { ...headers, 'content-type': 'application/json' }, body: JSON.stringify({ title: 'A', body: 'B' }),
     }));
     expect(requirement.status).toBe(403);
-    expect(await requirement.json()).toEqual({ error: 'business persona required' });
+    expect(await requirement.json()).toEqual({ error: 'business persona required', code: 'forbidden' });
     expect(fixture.forgejo.createRequirement).not.toHaveBeenCalled();
 
     const workspace = await app.handle(request(`/api/v1/applications/${encodeURIComponent(application.id)}/workspace`, {
@@ -1049,6 +1143,23 @@ describe('Agentic Software Factory Elysia server', () => {
     expect(get).not.toHaveBeenCalled();
   });
 
+  test('rejects malformed requirement event responses instead of sending them', async () => {
+    const base = services();
+    const fixture = services({
+      forgejo: {
+        ...base.forgejo,
+        events: mock(async () => [{ id: 'event-1' }] as never),
+      },
+    });
+
+    const response = await createServer(fixture.value).handle(request('/api/v1/requirements/2/events?team=factory', {
+      headers: { authorization: 'Bearer valid' },
+    }));
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({ error: 'internal server error', code: 'internal_error' });
+  });
+
   test('rejects cross-team application assignments on requirement creation and update', async () => {
     const base = services();
     const paymentsApplication = { ...application, id: 'payments/app', team: 'payments' };
@@ -1075,6 +1186,19 @@ describe('Agentic Software Factory Elysia server', () => {
     }));
     expect(update.status).toBe(404);
     expect(fixture.forgejo.updateRequirement).not.toHaveBeenCalled();
+  });
+
+  test('rejects malformed implementation list responses', async () => {
+    const fixture = services({
+      implementation: { list: mock(async () => [{ id: 'incomplete-run' }]) } as never,
+    });
+
+    const response = await createServer(fixture.value).handle(request('/api/v1/requirements/2/implementation-runs', {
+      headers: { authorization: 'Bearer valid' },
+    }));
+
+    expect(response.status).toBe(502);
+    expect(await response.json()).toEqual({ error: 'upstream request failed', code: 'dependency_failure' });
   });
 
   test('checks a run requirement board before acting on an implementation run ID', async () => {
@@ -1190,7 +1314,7 @@ describe('Agentic Software Factory Elysia server', () => {
 
   test('rejects an application from another team when starting implementation', async () => {
     const base = services();
-    const start = mock(async () => ({ id: 'run-1' }));
+    const start = mock(async () => implementationRun);
     const paymentsApplication = { ...application, id: 'payments/app', team: 'payments' };
     const operationsApplication = { ...application, id: 'operations/app', team: 'operations' };
     const fixture = services({
@@ -1367,7 +1491,7 @@ describe('Agentic Software Factory Elysia server', () => {
     }));
 
     expect(response.status).toBe(503);
-    expect(await response.json()).toEqual({ error: 'AI interview could not be started' });
+    expect(await response.json()).toEqual({ error: 'AI interview could not be started', code: 'service_unavailable' });
     expect(fixture.forgejo.beginInterview).not.toHaveBeenCalled();
     expect(logs).toContainEqual(expect.objectContaining({ event: 'ai_interview_start_failed', requirementNumber: 2 }));
     expect(JSON.stringify(logs)).not.toContain('token-123');
@@ -1407,10 +1531,10 @@ describe('Agentic Software Factory Elysia server', () => {
   });
 
   test('gives business product controls and developers the technical superset', async () => {
-    const start = mock(async () => ({ id: 'run-1' }));
-    const review = mock(async () => ({ id: 'run-1' }));
-    const prepareVerification = mock(async () => ({ id: 'run-1' }));
-    const complete = mock(async () => ({ id: 'run-1', phase: 'merging' }));
+    const start = mock(async () => implementationRun);
+    const review = mock(async () => implementationRun);
+    const prepareVerification = mock(async () => implementationRun);
+    const complete = mock(async () => ({ ...implementationRun, phase: 'merging' as const }));
     const implementation = { start, review, prepareVerification, complete, requirementScope: mock(async () => ({ requirementNumber: 2, systemId: application.id })) } as never;
     const body = JSON.stringify({ decision: 'approve', body: '' });
 
@@ -1466,7 +1590,7 @@ describe('Agentic Software Factory Elysia server', () => {
     }));
 
     expect(response.status).toBe(422);
-    expect(await response.json()).toEqual({ error: 'Verify your email address before starting implementation' });
+    expect(await response.json()).toEqual({ error: 'Verify your email address before starting implementation', code: 'unprocessable_entity' });
     expect(start).not.toHaveBeenCalled();
   });
 
@@ -1478,7 +1602,7 @@ describe('Agentic Software Factory Elysia server', () => {
     }));
 
     expect(response.status).toBe(502);
-    expect(await response.json()).toEqual({ error: 'Implementation could not be started' });
+    expect(await response.json()).toEqual({ error: 'Implementation could not be started', code: 'dependency_failure' });
   });
 
   test('returns a safe actionable Forgejo connection error for implementation startup', async () => {
@@ -1489,7 +1613,7 @@ describe('Agentic Software Factory Elysia server', () => {
     }));
 
     expect(response.status).toBe(409);
-    expect(await response.json()).toEqual({ error: 'Connect Forgejo in Coder before starting implementation' });
+    expect(await response.json()).toEqual({ error: 'Connect Forgejo in Coder before starting implementation', code: 'conflict' });
   });
 
   test('preserves self-review denial after persona authorization', async () => {
@@ -1505,6 +1629,34 @@ describe('Agentic Software Factory Elysia server', () => {
     }));
     expect(response.status).toBe(403);
     expect(await response.json()).toEqual({ error: 'implementation contributors cannot review their delivery', code: 'forbidden' });
+  });
+
+  test('validates implementation contracts and keeps retry responses empty', async () => {
+    const base = services();
+    const retryVerification = mock(async () => undefined);
+    const fixture = services({
+      implementation: {
+        requirementScope: mock(async () => ({ requirementNumber: 2, systemId: application.id })),
+        retryVerification,
+      } as never,
+      auth: { ...base.auth, authenticate: mock(async () => ({ ...identity, groups: ['tenant-factory', 'tenant-factory-business'] })) },
+    });
+    const app = createServer(fixture.value);
+    const headers = { authorization: 'Bearer valid', 'content-type': 'application/json' };
+
+    const invalid = await app.handle(request('/api/v1/implementation-runs/run-1/verification/retry?unexpected=true', {
+      method: 'POST', headers, body: '{}',
+    }));
+    expect(invalid.status).toBe(400);
+    expect(await invalid.json()).toEqual({ error: 'invalid request', code: 'bad_request' });
+    expect(retryVerification).not.toHaveBeenCalled();
+
+    const accepted = await app.handle(request('/api/v1/implementation-runs/run-1/verification/retry?team=factory', {
+      method: 'POST', headers, body: '{}',
+    }));
+    expect(accepted.status).toBe(202);
+    expect(await accepted.text()).toBe('');
+    expect(retryVerification).toHaveBeenCalledWith('run-1');
   });
 
   test('rejects authenticated users outside the configured tenant group', async () => {
@@ -1526,7 +1678,7 @@ describe('Agentic Software Factory Elysia server', () => {
     const pending = { id: 'question-5', header: 'Priorität', prompt: 'Was ist wichtiger?', type: 'single' as const, options: [{ value: 'option-0', label: 'Tempo', description: null }], allowCustom: true, hint: null };
     const fixture = services();
     const priorAnswer = { questionId: 'prior', expectedVersion: 1, selected: ['option-0'], customText: '' };
-    let state: InterviewState = { ...emptyState, version: 5, teamId: 'factory', repository: application.id, requirementNumber: 7, runId: 'run-1', chatId: 'chat-1', proposalNonce: 'nonce-1', pending, turns: Array.from({ length: 4 }, () => ({ question: pending, answer: priorAnswer })) };
+    let state: InterviewState = { ...emptyState, version: 5, teamId: 'factory', repository: application.id, requirementNumber: 7, runId: 'run-1', chatId: 'chat-1', proposalNonce: 'nonce-1', pending, turns: Array.from({ length: 4 }, () => ({ question: pending, answer: priorAnswer, answeredAt: '2026-08-20T01:00:00Z', answeredBy: identity.subject })) };
     fixture.forgejo.getInterview = mock(async () => ({ state, spec: null }));
     fixture.forgejo.prepareInterviewAnswer = mock(async (_number, actor, answer, payload, operationId) => {
       order.push('persist');
@@ -1581,7 +1733,7 @@ describe('Agentic Software Factory Elysia server', () => {
     const priorAnswer = { questionId: 'prior', expectedVersion: 1, selected: ['a'], customText: '' };
     const next = { ...pending, id: 'question-8' };
     const fixture = services();
-    let state: InterviewState = { ...emptyState, version: 7, teamId: 'factory', repository: application.id, requirementNumber: 7, runId: 'run-1', chatId: 'chat-1', proposalNonce: 'nonce-1', pending, turns: Array.from({ length: 6 }, () => ({ question: pending, answer: priorAnswer })) };
+    let state: InterviewState = { ...emptyState, version: 7, teamId: 'factory', repository: application.id, requirementNumber: 7, runId: 'run-1', chatId: 'chat-1', proposalNonce: 'nonce-1', pending, turns: Array.from({ length: 6 }, () => ({ question: pending, answer: priorAnswer, answeredAt: '2026-08-20T01:00:00Z', answeredBy: identity.subject })) };
     fixture.forgejo.getInterview = mock(async () => ({ state, spec: null }));
     fixture.forgejo.prepareInterviewAnswer = mock(async (_number, actor, answer, payload, operationId) => {
       state = { ...state, pendingOperation: { operationId, answer, payload, previousQuestionId: pending.id, expectedVersion: 7, phase: 'answer' as const, createdAt: '2026-08-20T01:00:00Z', createdBy: actor } };
@@ -1604,7 +1756,7 @@ describe('Agentic Software Factory Elysia server', () => {
     const pending = { id: 'question-8', header: 'Scope', prompt: 'Final decision?', type: 'single' as const, options: [{ value: 'a', label: 'A', description: null }, { value: 'b', label: 'B', description: null }], allowCustom: true, hint: null };
     const priorAnswer = { questionId: 'prior', expectedVersion: 1, selected: ['a'], customText: '' };
     const fixture = services();
-    let state: InterviewState = { ...emptyState, version: 8, teamId: 'factory', repository: application.id, requirementNumber: 7, runId: 'run-1', chatId: 'chat-1', proposalNonce: 'nonce-1', pending, turns: Array.from({ length: 7 }, () => ({ question: pending, answer: priorAnswer })) };
+    let state: InterviewState = { ...emptyState, version: 8, teamId: 'factory', repository: application.id, requirementNumber: 7, runId: 'run-1', chatId: 'chat-1', proposalNonce: 'nonce-1', pending, turns: Array.from({ length: 7 }, () => ({ question: pending, answer: priorAnswer, answeredAt: '2026-08-20T01:00:00Z', answeredBy: identity.subject })) };
     fixture.forgejo.getInterview = mock(async () => ({ state, spec: null }));
     fixture.forgejo.prepareInterviewAnswer = mock(async (_number, actor, answer, payload, operationId) => {
       state = { ...state, pendingOperation: { operationId, answer, payload, previousQuestionId: pending.id, expectedVersion: 8, phase: 'answer' as const, createdAt: '2026-08-20T01:00:00Z', createdBy: actor } };
@@ -1661,7 +1813,7 @@ describe('Agentic Software Factory Elysia server', () => {
       auth: { ...base.auth, authenticate: mock(async () => sessionIdentity) },
       identityByUserId: mock(async (userId) => userId === creator.subject ? creator : userId === viewer.subject ? viewer : null),
     });
-    let state: InterviewState = { ...emptyState, version: 5, teamId: 'factory', repository: application.id, requirementNumber: 7, runId: 'run-1', chatId: 'chat-1', proposalNonce: 'nonce-1', pending, turns: Array.from({ length: 4 }, () => ({ question: pending, answer: priorAnswer })) };
+    let state: InterviewState = { ...emptyState, version: 5, teamId: 'factory', repository: application.id, requirementNumber: 7, runId: 'run-1', chatId: 'chat-1', proposalNonce: 'nonce-1', pending, turns: Array.from({ length: 4 }, () => ({ question: pending, answer: priorAnswer, answeredAt: '2026-08-20T01:00:00Z', answeredBy: identity.subject })) };
     fixture.forgejo.getInterview = mock(async () => ({ state, spec: null }));
     fixture.forgejo.prepareInterviewAnswer = mock(async (_number, actor, answer, payload, operationId) => {
       state = { ...state, pendingOperation: state.pendingOperation ?? { operationId, answer, payload, previousQuestionId: pending.id, expectedVersion: 5, phase: 'answer', createdAt: '2026-08-20T01:00:00Z', createdBy: actor } };
@@ -1820,7 +1972,7 @@ describe('Agentic Software Factory Elysia server', () => {
     }));
 
     expect(response.status).toBe(409);
-    expect(await response.json()).toEqual({ error: 'interview operation is still processing' });
+    expect(await response.json()).toEqual({ error: 'interview operation is still processing', code: 'conflict' });
     expect(fixture.forgejo.setInterviewOperationFailure).not.toHaveBeenCalled();
   });
 
@@ -2145,7 +2297,7 @@ describe('Agentic Software Factory Elysia server', () => {
       body: JSON.stringify({ title: 'x', body: 'x'.repeat(1024 * 1024) }),
     }));
     expect(global.status).toBe(413);
-    expect(await global.json()).toEqual({ error: 'payload too large' });
+    expect(await global.json()).toEqual({ error: 'payload too large', code: 'payload_too_large' });
 
     const mcpPayload = await app.handle(request('/mcp', {
       method: 'POST',
@@ -2164,7 +2316,7 @@ describe('Agentic Software Factory Elysia server', () => {
       log: (entry) => logs.push(entry),
       forgejo: { ...services().forgejo, board: async () => { throw new UpstreamHttpError('Forgejo', 401, 'forgejo-request-7'); } },
     });
-    const response = await createServer(fixture.value).handle(request('/api/v1/board?token=leak', {
+    const response = await createServer(fixture.value).handle(request('/api/v1/board?team=factory', {
       headers: { authorization: 'Bearer valid', 'x-request-id': 'request-123' },
     }));
     expect(response.status).toBe(502);

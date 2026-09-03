@@ -66,7 +66,7 @@ describe('KanbanClient', () => {
     let error: unknown;
 
     (request(client, context, card, specification) as Observable<unknown>).subscribe({ error: (failure: unknown) => { error = failure; } });
-    TestBed.inject(HttpTestingController).expectOne(`/api/v1/requirements/6${suffix}?team=factory&application=factory%2Fexample-application`).flush({ digest: 7 });
+    TestBed.inject(HttpTestingController).expectOne(`/api/v1/requirements/6${suffix}?team=factory&application=factory/example-application`).flush({ digest: 7 });
 
     expect(error).toBeTruthy();
   });
@@ -83,16 +83,16 @@ describe('KanbanClient', () => {
     let updated: typeof card | undefined;
     const context = { team: 'factory', application: 'factory/example-application' };
     client.updateCard(context, card, { title: card.title }).subscribe((value) => { updated = value as typeof card; });
-    http.expectOne('/api/v1/requirements/6?team=factory&application=factory%2Fexample-application').flush(controllerCard);
+    http.expectOne('/api/v1/requirements/6?team=factory&application=factory/example-application').flush(controllerCard);
     expect(updated?.systemId).toBe(card.systemId);
 
     let moved: typeof card | undefined;
     client.moveCard(context, updated!, 'requirements').subscribe((value) => { moved = value as typeof card; });
-    http.expectOne('/api/v1/requirements/6/status?team=factory&application=factory%2Fexample-application').flush(controllerCard);
+    http.expectOne('/api/v1/requirements/6/status?team=factory&application=factory/example-application').flush(controllerCard);
     expect(moved?.systemId).toBe(card.systemId);
 
     client.accept(context, moved!, { goal: 'Proof', users: [], userStories: [], acceptanceCriteria: ['Exists'], nonFunctionalRequirements: [], moscow: { must: [], should: [], could: [] }, openQuestions: [], nonGoals: [] }).subscribe();
-    http.expectOne('/api/v1/requirements/6/accept?team=factory&application=factory%2Fexample-application').flush({
+    http.expectOne('/api/v1/requirements/6/accept?team=factory&application=factory/example-application').flush({
       requirementId: 'factory/requirements#6', revision: 'revision-1', digest: 'sha256:accepted',
       path: 'requirements/6.json', commitSha: '0123456789abcdef0123456789abcdef01234567',
     });
@@ -107,8 +107,8 @@ describe('KanbanClient', () => {
     context.team = 'factory';
     context.application = 'factory/billing';
 
-    http.expectNone('/api/v1/board?team=factory&application=factory%2Fbilling');
-    http.expectOne('/api/v1/board?team=operations&application=operations%2Forders').flush({
+    http.expectNone('/api/v1/board?team=factory&application=factory/billing');
+    http.expectOne('/api/v1/board?team=operations&application=operations/orders').flush({
       repository: 'operations/requirements',
       total: 0,
       truncated: false,

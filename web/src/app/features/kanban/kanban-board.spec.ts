@@ -11,10 +11,11 @@ import { TranslocoTestingModule } from '@jsverse/transloco';
 import { of, Subject, throwError } from 'rxjs';
 
 import type { ApplicationSummary, DeveloperWorkspace } from '@agentic-software-factory/api-contracts/applications';
-import type { KanbanBoardPage as KanbanBoardData, KanbanCard, KanbanColumn, KanbanColumnId } from '@agentic-software-factory/api-contracts/kanban';
+import type { KanbanColumnId } from '@agentic-software-factory/api-contracts/kanban';
 import { ApplicationsClient } from '../../core/api/applications.client';
 import { AuthService } from '../../core/auth/auth.service';
 import { KanbanClient } from '../../core/api/kanban.client';
+import type { KanbanBoardPage as KanbanBoardData, KanbanCard, KanbanColumn } from '../../core/api/kanban.types';
 import { SystemContextService } from '../../core/system/system-context.service';
 import { TeamContextService } from '../../core/team/team-context.service';
 import { BoardStore } from './board.store';

@@ -4,15 +4,16 @@
  * All software distributed under the RPL is provided strictly on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED, AND LICENSOR HEREBY DISCLAIMS ALL SUCH WARRANTIES, INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT, OR NON-INFRINGEMENT. See the RPL for specific language governing rights and limitations under the RPL.
  */
 
-import type { MonitoringResponse } from '@agentic-software-factory/api-contracts/monitoring';
-import { implementationRunsResponseSchema } from '@agentic-software-factory/api-contracts/implementation';
 import {
-  emptyBody,
-  numberParams,
-  reviewImplementationBody,
-  runParams,
-  startImplementationBody,
-} from './schemas';
+  implementationRunSchema,
+  implementationRunsResponseSchema,
+  reviewImplementationBodySchema,
+  startImplementationBodySchema,
+} from '@agentic-software-factory/api-contracts/implementation';
+import { emptyBodySchema, issueNumberParamSchema, requestContextQuerySchema, runIdParamSchema } from '@agentic-software-factory/api-contracts/common';
+import { apiErrorResponses } from '@agentic-software-factory/api-contracts/errors';
+import { governanceQuerySchema, monitoringResponseSchema } from '@agentic-software-factory/api-contracts/monitoring';
+import { t } from 'elysia';
 import {
   applicationForTeam,
   createAuthenticatedApi,
@@ -25,8 +26,8 @@ import {
   requireCapability,
   requireImplementationRunAccess,
 } from './route-support';
-import type { ServerServices } from './types';
 import { validateResponse } from './response-contracts';
+import type { ServerServices } from './types';
 
 export function implementationRoutes(
   services: ServerServices,
@@ -38,12 +39,16 @@ export function implementationRoutes(
       const scope = await repositoryScope(request, identity!, services);
       await services.forgejo.getIssue(issueNumber(params.number), scope);
       try {
-        return validateResponse(implementationRunsResponseSchema, {
+        return Response.json(validateResponse(implementationRunsResponseSchema, {
           runs: await services.implementation.list(issueNumber(params.number), identity!, request.signal, scope.repository!.systemId),
-        });
+        }));
       }
       catch (error) { return mapError(error, 502, (mapped) => recordError(request, mapped)); }
-    }, { params: numberParams })
+    }, {
+      params: issueNumberParamSchema,
+      query: requestContextQuerySchema,
+      response: { 200: implementationRunsResponseSchema, ...apiErrorResponses },
+    })
     .post('/api/v1/requirements/:number/implementation-runs', async ({ params, body, request, identity }) => {
       const denied = requireCapability(identity!, services, 'implementationStart', 'developer persona required');
       if (denied) return denied;
@@ -53,49 +58,79 @@ export function implementationRoutes(
       await services.forgejo.getIssue(issueNumber(params.number), scope);
       const application = await applicationForTeam(body.applicationId, scope.team!, services);
       if (!application) return errorResponse(404, 'Application not found');
-      try { return Response.json(await services.implementation.start(issueNumber(params.number), body.applicationId, identity!, request.signal), { status: 202 }); }
+      try { return Response.json(validateResponse(implementationRunSchema, await services.implementation.start(issueNumber(params.number), body.applicationId, identity!, request.signal)), { status: 202 }); }
       catch (error) { return implementationStartError(error); }
-    }, { params: numberParams, body: startImplementationBody })
+    }, {
+      params: issueNumberParamSchema,
+      query: requestContextQuerySchema,
+      body: startImplementationBodySchema,
+      response: { 202: implementationRunSchema, ...apiErrorResponses },
+    })
     .post('/api/v1/implementation-runs/:id/verification', async ({ params, request, identity }) => {
       const denied = requireCapability(identity!, services, 'implementationPrepare', 'business access required');
       if (denied) return denied;
       if (!services.implementation) return errorResponse(503, 'implementation orchestration is not configured');
       await requireImplementationRunAccess(params.id, request, identity!, services);
-      try { return await services.implementation.prepareVerification(params.id, identity!, request.signal); }
+      try { return Response.json(validateResponse(implementationRunSchema, await services.implementation.prepareVerification(params.id, identity!, request.signal))); }
       catch (error) { return mapError(error, 502, (mapped) => recordError(request, mapped)); }
-    }, { params: runParams, body: emptyBody })
+    }, {
+      params: runIdParamSchema,
+      query: requestContextQuerySchema,
+      body: emptyBodySchema,
+      response: { 200: implementationRunSchema, ...apiErrorResponses },
+    })
     .post('/api/v1/implementation-runs/:id/review', async ({ params, body, request, identity }) => {
       const denied = requireCapability(identity!, services, 'implementationReview', 'business access required');
       if (denied) return denied;
       if (!services.implementation) return errorResponse(503, 'implementation orchestration is not configured');
       await requireImplementationRunAccess(params.id, request, identity!, services);
-      try { return await services.implementation.review(params.id, identity!, body.decision, body.body, request.signal); }
+      try { return Response.json(validateResponse(implementationRunSchema, await services.implementation.review(params.id, identity!, body.decision, body.body, request.signal))); }
       catch (error) { return mapError(error, 502, (mapped) => recordError(request, mapped)); }
-    }, { params: runParams, body: reviewImplementationBody })
+    }, {
+      params: runIdParamSchema,
+      query: requestContextQuerySchema,
+      body: reviewImplementationBodySchema,
+      response: { 200: implementationRunSchema, ...apiErrorResponses },
+    })
     .post('/api/v1/implementation-runs/:id/complete', async ({ params, request, identity }) => {
       const denied = requireCapability(identity!, services, 'implementationComplete', 'business access required');
       if (denied) return denied;
       if (!services.implementation) return errorResponse(503, 'implementation orchestration is not configured');
       await requireImplementationRunAccess(params.id, request, identity!, services);
-      try { return Response.json(await services.implementation.complete(params.id, identity!, request.signal), { status: 202 }); }
+      try { return Response.json(validateResponse(implementationRunSchema, await services.implementation.complete(params.id, identity!, request.signal)), { status: 202 }); }
       catch (error) { return mapError(error, 502, (mapped) => recordError(request, mapped)); }
-    }, { params: runParams, body: emptyBody })
+    }, {
+      params: runIdParamSchema,
+      query: requestContextQuerySchema,
+      body: emptyBodySchema,
+      response: { 202: implementationRunSchema, ...apiErrorResponses },
+    })
     .post('/api/v1/implementation-runs/:id/workspace/stop', async ({ params, request, identity }) => {
       const denied = requireCapability(identity!, services, 'implementationStart', 'developer persona required');
       if (denied) return denied;
       if (!services.implementation) return errorResponse(503, 'implementation orchestration is not configured');
       await requireImplementationRunAccess(params.id, request, identity!, services);
-      try { return await services.implementation.stopWorkspace(params.id, identity!, request.signal); }
+      try { return Response.json(validateResponse(implementationRunSchema, await services.implementation.stopWorkspace(params.id, identity!, request.signal))); }
       catch (error) { return mapError(error, 502, (mapped) => recordError(request, mapped)); }
-    }, { params: runParams, body: emptyBody })
+    }, {
+      params: runIdParamSchema,
+      query: requestContextQuerySchema,
+      body: emptyBodySchema,
+      response: { 200: implementationRunSchema, ...apiErrorResponses },
+    })
     .post('/api/v1/implementation-runs/:id/workspace/resume', async ({ params, request, identity }) => {
       const denied = requireCapability(identity!, services, 'implementationStart', 'developer persona required');
       if (denied) return denied;
       if (!services.implementation) return errorResponse(503, 'implementation orchestration is not configured');
       await requireImplementationRunAccess(params.id, request, identity!, services);
-      try { return await services.implementation.resumeWorkspace(params.id, identity!, request.signal); }
+      try { return Response.json(validateResponse(implementationRunSchema, await services.implementation.resumeWorkspace(params.id, identity!, request.signal))); }
       catch (error) { return mapError(error, 502, (mapped) => recordError(request, mapped)); }
-    }, { params: runParams, body: emptyBody })
+    }, {
+      params: runIdParamSchema,
+      query: requestContextQuerySchema,
+      body: emptyBodySchema,
+      response: { 200: implementationRunSchema, ...apiErrorResponses },
+    })
     .post('/api/v1/implementation-runs/:id/verification/retry', async ({ params, request, identity }) => {
       const denied = requireCapability(identity!, services, 'implementationPrepare', 'business access required');
       if (denied) return denied;
@@ -103,7 +138,12 @@ export function implementationRoutes(
       await requireImplementationRunAccess(params.id, request, identity!, services);
       await services.implementation.retryVerification(params.id);
       return new Response(null, { status: 202 });
-    }, { params: runParams, body: emptyBody })
+    }, {
+      params: runIdParamSchema,
+      query: requestContextQuerySchema,
+      body: emptyBodySchema,
+      response: { 202: t.Void(), ...apiErrorResponses },
+    })
     .post('/api/v1/implementation-runs/:id/complete/retry', async ({ params, request, identity }) => {
       const denied = requireCapability(identity!, services, 'implementationComplete', 'business access required');
       if (denied) return denied;
@@ -111,8 +151,13 @@ export function implementationRoutes(
       await requireImplementationRunAccess(params.id, request, identity!, services);
       await services.implementation.retryCompletion(params.id);
       return new Response(null, { status: 202 });
-    }, { params: runParams, body: emptyBody })
-    .get('/api/v1/governance', async ({ request, identity }): Promise<MonitoringResponse | Response> => {
+    }, {
+      params: runIdParamSchema,
+      query: requestContextQuerySchema,
+      body: emptyBodySchema,
+      response: { 202: t.Void(), ...apiErrorResponses },
+    })
+    .get('/api/v1/governance', async ({ request, identity }) => {
       const scope = requestScope(request, identity!, services);
       const workspaces = await services.coder.summary(scope).catch(() => ({ count: 0, workspaces: [], available: false }));
       const projectedWorkspaces = workspaces.workspaces
@@ -134,5 +179,8 @@ export function implementationRoutes(
         workspaces: { available: workspaces.available, count: projectedWorkspaces.length, workspaces: projectedWorkspaces },
         capabilities: { board: 'forgejo-issues', identity: 'oidc', workspaces: 'coder-community' },
       };
+    }, {
+      query: governanceQuerySchema,
+      response: { 200: monitoringResponseSchema, ...apiErrorResponses },
     });
 }
